@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added native GRCh37 WGS support for verified legacy alignments, including a
+  plan-first, checksummed Broad/GATK resource provisioner and a site-neutral
+  configuration overlay.
+- Added fail-closed alignment/reference checks before deterministic
+  downsampling, plus complete GRCh37 and GRCh38 DAG dry runs.
+- Added resumable download progress reporting to both reference provisioners.
 - Expanded the site-neutral SLURM runbook with locked setup, a one-pair/small-territory scheduler smoke run, driver preview, submission, monitoring, and recovery.
 - Added first-class `container_runtime: apptainer` support and explicit binding of external reference directories.
 - Stopped the cluster setup template from re-running `pixi install` inside every controller launch.

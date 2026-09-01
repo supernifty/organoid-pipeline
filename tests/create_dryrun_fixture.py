@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a tiny parse-only fixture for the complete GRCh38 WGS DAG."""
+"""Create a tiny parse-only fixture for a complete GRCh37 or GRCh38 WGS DAG."""
 
 import argparse
 from pathlib import Path
@@ -10,17 +10,22 @@ import yaml
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("tmp/codex/dryrun"))
+    parser.add_argument("--build", choices=("grch37", "grch38"), default="grch38")
     args = parser.parse_args()
     root = args.output
     root.mkdir(parents=True, exist_ok=True)
+    contig = "1" if args.build == "grch37" else "chr1"
     reference = root / "genome.fa"
-    reference.write_text(">chr1\nA\n")
-    Path(f"{reference}.fai").write_text("chr1\t1000\t0\t0\t0\n")
-    (root / "genome.dict").write_text("@HD\tVN:1.6\n@SQ\tSN:chr1\tLN:1000\n")
+    reference.write_text(f">{contig}\nA\n")
+    Path(f"{reference}.fai").write_text(f"{contig}\t1000\t0\t0\t0\n")
+    (root / "genome.dict").write_text(f"@HD\tVN:1.6\n@SQ\tSN:{contig}\tLN:1000\n")
     (root / "territory.interval_list").write_text(
-        "@HD\tVN:1.6\tSO:coordinate\n@SQ\tSN:chr1\tLN:1000\nchr1\t1\t1000\t+\tCALLABLE\n"
+        f"@HD\tVN:1.6\tSO:coordinate\n@SQ\tSN:{contig}\tLN:1000\n{contig}\t1\t1000\t+\tCALLABLE\n"
     )
-    for extension in ("amb", "ann", "bwt", "pac", "sa", "alt"):
+    extensions = ["amb", "ann", "bwt", "pac", "sa"]
+    if args.build == "grch38":
+        extensions.append("alt")
+    for extension in extensions:
         Path(f"{reference}.64.{extension}").touch()
     for name in (
         "gnomad.vcf.gz",
@@ -57,11 +62,13 @@ def main():
     (root / "samples.yaml").write_text(yaml.safe_dump(samples, sort_keys=False))
     config = yaml.safe_load(Path("config/config.yaml").read_text())
     config["container_runtime"] = "apptainer"
-    config["analysis"]["wgs"]["contigs"] = ["chr1"]
+    config["analysis"]["wgs"]["contigs"] = [contig]
     config["analysis"]["wgs"]["scatter_count"] = 1
-    config["chromosomes"] = ["chr1"]
+    config["chromosomes"] = [contig]
     config["reference"].update(
         {
+            "build": args.build,
+            "regions_source_build": args.build,
             "genome": str(reference),
             "genome_dict": str(root / "genome.dict"),
             "wgs_calling_regions": str(root / "territory.interval_list"),
@@ -70,6 +77,8 @@ def main():
             "contamination_sites": str(root / "sites.vcf.gz"),
         }
     )
+    config["mutational_signatures"]["reference_build"] = args.build
+    config["hotspots"]["reference_build"] = args.build
     config["run_management"] = {
         "samples_file": str(root / "samples.yaml"),
         "config_file": str(root / "config.yaml"),

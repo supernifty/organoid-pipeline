@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import sys
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
@@ -258,7 +259,24 @@ def download(resource: Resource, output: Path) -> str:
                 raise ValueError(f"Unexpected resume response for {resource.filename}")
         mode = "ab" if append else "wb"
         with partial.open(mode) as handle:
-            shutil.copyfileobj(response, handle, length=8 * 1024 * 1024)
+            downloaded = offset if append else 0
+            started = time.monotonic()
+            last_report = started
+            while block := response.read(8 * 1024 * 1024):
+                handle.write(block)
+                downloaded += len(block)
+                now = time.monotonic()
+                if now - last_report >= 30 or downloaded == resource.size:
+                    elapsed = max(now - started, 0.001)
+                    transferred = downloaded - (offset if append else 0)
+                    speed = transferred / elapsed / 2**20
+                    percent = 100 * downloaded / resource.size
+                    print(
+                        f"progress: {resource.filename}: {human_size(downloaded)} / "
+                        f"{human_size(resource.size)} ({percent:.1f}%), {speed:.1f} MiB/s",
+                        flush=True,
+                    )
+                    last_report = now
 
     if partial.stat().st_size != resource.size:
         raise ValueError(

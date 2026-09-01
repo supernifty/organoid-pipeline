@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import json
 import os
 import subprocess
@@ -24,6 +25,100 @@ def weighted_depth(path):
     return total / bases
 
 
+def fai_lengths(path):
+    return {
+        fields[0]: int(fields[1])
+        for fields in (line.split("\t") for line in Path(path).read_text().splitlines())
+    }
+
+
+def parse_alignment_header(text):
+    sort_order = None
+    sequences = {}
+    for line in text.splitlines():
+        fields = line.split("\t")
+        if fields[0] == "@HD":
+            values = dict(item.split(":", 1) for item in fields[1:] if ":" in item)
+            sort_order = values.get("SO")
+        elif fields[0] == "@SQ":
+            values = dict(item.split(":", 1) for item in fields[1:] if ":" in item)
+            if "SN" in values and "LN" in values:
+                sequences[values["SN"]] = int(values["LN"])
+    return sort_order, sequences
+
+
+def territory_contigs(path):
+    opener = gzip.open if str(path).endswith(".gz") else open
+    contigs = []
+    with opener(path, "rt") as handle:
+        for line in handle:
+            if not line.strip() or line.startswith(("@", "#", "track", "browser")):
+                continue
+            contig = line.split("\t", 1)[0]
+            if contig not in contigs:
+                contigs.append(contig)
+    if not contigs:
+        raise ValueError(f"analysis territory has no contigs: {path}")
+    return contigs
+
+
+def validate_dictionaries(alignment_lengths, reference_lengths, required_contigs, mapped):
+    for contig in required_contigs:
+        if alignment_lengths.get(contig) != reference_lengths.get(contig):
+            raise ValueError(
+                f"alignment and configured reference disagree for required contig {contig}: "
+                f"{alignment_lengths.get(contig)!r} != {reference_lengths.get(contig)!r}"
+            )
+    incompatible = [
+        contig
+        for contig, count in mapped.items()
+        if count > 0 and alignment_lengths.get(contig) != reference_lengths.get(contig)
+    ]
+    if incompatible:
+        preview = ", ".join(incompatible[:10])
+        suffix = " ..." if len(incompatible) > 10 else ""
+        raise ValueError(
+            "mapped reads use contigs absent from or incompatible with the configured "
+            f"reference: {preview}{suffix}"
+        )
+
+
+def validate_input_reference(alignment, reference, territory):
+    fai = Path(f"{reference}.fai")
+    if not fai.is_file():
+        raise ValueError(f"reference FASTA index is missing: {fai}")
+    subprocess.run(["samtools", "quickcheck", "-v", alignment], check=True)
+    header = subprocess.run(
+        ["samtools", "view", "-H", alignment],
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
+    sort_order, alignment_lengths = parse_alignment_header(header)
+    if sort_order != "coordinate":
+        raise ValueError(f"input alignment is not coordinate sorted (SO={sort_order!r})")
+    idxstats = subprocess.run(
+        ["samtools", "idxstats", "-T", reference, alignment],
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
+    mapped = {}
+    for line in idxstats.splitlines():
+        fields = line.split("\t")
+        if len(fields) >= 4 and fields[0] != "*":
+            mapped[fields[0]] = int(fields[2])
+    reference_lengths = fai_lengths(fai)
+    required = territory_contigs(territory)
+    validate_dictionaries(alignment_lengths, reference_lengths, required, mapped)
+    return {
+        "sort_order": sort_order,
+        "required_contigs": required,
+        "mapped_contig_count": sum(count > 0 for count in mapped.values()),
+        "reference_fai_sha256": hashlib.sha256(fai.read_bytes()).hexdigest(),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
@@ -36,6 +131,7 @@ def main():
     parser.add_argument("--report", required=True)
     parser.add_argument("--threads", type=int, default=4)
     args = parser.parse_args()
+    compatibility = validate_input_reference(args.input, args.reference, args.territory)
     fraction = args.target_depth / args.input_depth
     if not 0 < fraction <= 1:
         raise ValueError("target depth must be positive and no greater than measured input depth")
@@ -78,6 +174,7 @@ def main():
                 "target_depth": args.target_depth,
                 "fraction": fraction,
                 "achieved_depth": achieved,
+                "reference_compatibility": compatibility,
             },
             indent=2,
             sort_keys=True,

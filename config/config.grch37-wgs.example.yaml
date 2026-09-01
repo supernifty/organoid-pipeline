@@ -1,0 +1,47 @@
+# Native GRCh37 WGS overlay. Copy to the ignored config/config.local.yaml and
+# replace the absolute resource paths with output from provision-grch37.
+container_runtime: apptainer
+
+analysis:
+  type: wgs
+  wgs:
+    contigs: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "X", "Y"]
+    max_concurrent_mutect2_shards: 8
+
+reference:
+  build: grch37
+  genome: /absolute/path/grch37/Homo_sapiens_assembly19.fasta
+  genome_dict: /absolute/path/grch37/Homo_sapiens_assembly19.dict
+  bwa_index_suffix: ".64"
+  regions_source_build: grch37
+  wgs_calling_regions: /absolute/path/grch37/wgs_calling_regions.interval_list
+  wgs_exclude_regions: null
+  gnomad: /absolute/path/grch37/af-only-gnomad.grch37.vcf.gz
+  population_vcf: /absolute/path/grch37/af-only-gnomad.grch37.vcf.gz
+  population_af_field: "AF"
+  contamination_sites: /absolute/path/grch37/small_exac_common_3.grch37.vcf.gz
+  panel_of_normals: null
+  problematic_regions: null
+  low_mappability_regions: null
+  repeat_regions: null
+
+mutect2:
+  create_panel_of_normals: false
+
+mutational_signatures:
+  reference_build: grch37
+
+hotspots:
+  reference_build: grch37
+  resource: config/hotspots.tsv
+
+chromosomes: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "X", "Y"]
+
+germline:
+  enabled: false
+
+annotation:
+  enabled: false
+
+somalier:
+  enabled: false

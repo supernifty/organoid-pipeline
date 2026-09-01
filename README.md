@@ -1,6 +1,6 @@
 # Low-pass organoid somatic SNV pipeline
 
-Production-oriented Snakemake 9 workflow for mutations acquired between an ancestral early-passage monoclonal organoid baseline and later descendant organoids. GRCh38 WGS, approximately 6× later samples, shared baselines, FASTQ and CRAM inputs, Mutect2, and Strelka2 are first-class.
+Production-oriented Snakemake 9 workflow for mutations acquired between an ancestral early-passage monoclonal organoid baseline and later descendant organoids. GRCh38 WGS is the primary production profile; native GRCh37 WGS is supported for verified legacy alignments. Approximately 6× later samples, shared baselines, FASTQ and CRAM inputs, Mutect2, and Strelka2 are first-class.
 
 The baseline is a biological time point, not an unrelated technical normal. A zero alternate count in a low-depth baseline is not proof that an allele was absent, so the workflow retains baseline depth/counts and makes filtering reversible.
 
@@ -75,7 +75,11 @@ Pre-aligned CRAMs must be coordinate sorted, indexed, duplicate marked, and alig
 
 Strelka 2.9 explicitly accepts BAM or CRAM and documents `--normalBam`, `--tumorBam`, `--referenceFasta`, indexed bgzip `--callRegions`, and WGS defaults. Mutect2/GATK uses the reference-backed CRAM directly. The relevant upstream documentation is the [Strelka 2.9 user guide](https://github.com/Illumina/strelka/blob/v2.9.x/docs/userGuide/README.md) and [GATK Mutect2 workflow](https://gatk.broadinstitute.org/hc/en-us/articles/360035531132--How-to-Call-somatic-mutations-using-GATK4-Mutect2).
 
-## GRCh38 resources
+## GRCh37 and GRCh38 resources
+
+The configured build must follow the alignment. Never relabel a BAM header, encode a GRCh37 BAM as CRAM with GRCh38, or use coordinate liftover as a substitute for read realignment. The preflight checks primary contig names and lengths, and downsampling additionally rejects mapped auxiliary contigs that the configured FASTA cannot represent.
+
+### GRCh38
 
 Edit `config/config.local.yaml` or supply a complete `--configfile`. All paths are configurable; nothing large is committed.
 
@@ -106,6 +110,29 @@ pixi run provision-grch38 --destination /absolute/shared/path/grch38 --execute
 The command downloads through `.partial` files, resumes when the server honors byte ranges, verifies the MD5 values published in Google Cloud Storage object metadata, atomically publishes complete files, constructs a primary-contig WGS interval list, validates resource dictionaries, and writes `resource-manifest.json`. It also writes `organoid-pipeline.reference.yaml`; copy its `reference:` mapping into the ignored `config/config.local.yaml`. The initial overlay deliberately uses the same AF-only gnomAD exact-allele VCF for Mutect2 and population filtering, avoiding a second much larger gnomAD download. A newer or more comprehensive exact-allele population resource can be configured later after compatibility review.
 
 The configured paths should be canonical absolute host paths. Their containing directories are mounted into containers automatically; the resources do not need to be embedded in an image or copied into this repository.
+
+### Native GRCh37 WGS
+
+For verified legacy BAMs aligned to Broad-style GRCh37 with contigs `1`–`22`, `X`, and `Y`, use the separate plan-first provisioner. The official GRCh37 Mutect2 resource is distributed as a 13.1 GiB uncompressed VCF, so the complete pinned remote download is 21.08 GiB. From an empty destination, the provisioner reserves 5 GiB transformation headroom and requires approximately 31.3 GiB free after its 1.2× safety margin.
+
+```bash
+pixi run provision-grch37 --destination /absolute/shared/path/grch37
+```
+
+After reviewing the object generations, checksums, and capacity, execute with an appropriate number of compression threads:
+
+```bash
+pixi run provision-grch37 \
+  --destination /absolute/shared/path/grch37 \
+  --threads 8 \
+  --execute
+```
+
+The command downloads the Broad `Homo_sapiens_assembly19` FASTA and BWA indexes plus the official GATK somatic-b37 resources. It verifies the published object checksums, injects the exact FASTA dictionary into the legacy VCF headers, BGZF-compresses and Tabix-indexes them, validates `INFO/AF` and reference compatibility, records derived SHA-256 checksums, and then removes the verified uncompressed VCF copies. Download and conversion progress is printed every 30 seconds. Interrupted downloads retain resumable `.partial` files.
+
+Copy [config.grch37-wgs.example.yaml](config/config.grch37-wgs.example.yaml) to the ignored `config/config.local.yaml`, then replace its paths from `organoid-pipeline.grch37.reference.yaml`. Keep `mutational_signatures.reference_build`, `hotspots.reference_build`, `chromosomes`, and `analysis.wgs.contigs` on GRCh37. Use a fresh batch name: run management rejects reuse across builds.
+
+The GRCh37 mode runs the same paired Mutect2, Strelka2, exact caller tiers, cohort recounting, reason-coded filtering, and SBS96 outputs as GRCh38. Its calls remain GRCh37-native. For GRCh38 production output, obtain original reads and realign them to GRCh38 rather than lifting the GRCh37 alignment.
 
 Ancestral baselines are never automatically combined into a panel of normals. `reference.panel_of_normals` is optional and must point to an unrelated, reviewed technical PoN.
 
@@ -224,11 +251,13 @@ QC includes original-read FastQC, samtools flagstat/stats, alignment and insert-
 pixi run test
 pixi run lint
 pixi run format-check
-uv run python tests/create_dryrun_fixture.py --output tmp/codex/dryrun
-pixi run snakemake --dry-run --cores 1 --configfile tmp/codex/dryrun/config.yaml -- results/catalogs/O.stringent.vcf.gz
+pixi run python tests/create_dryrun_fixture.py --build grch38 --output tmp/codex/dryrun-grch38
+pixi run snakemake --dry-run --cores 1 --configfile tmp/codex/dryrun-grch38/config.yaml -- results/catalogs/O.stringent.vcf.gz
+pixi run python tests/create_dryrun_fixture.py --build grch37 --output tmp/codex/dryrun-grch37
+pixi run snakemake --dry-run --cores 1 --configfile tmp/codex/dryrun-grch37/config.yaml -- results/catalogs/O.stringent.vcf.gz
 ```
 
-The fixture is parse/DAG-only: placeholder CRAMs and resources must never be executed. Unit tests cover shared baselines, manifest rejection, exact caller tiers, strand-aware SNV/indel recounting, SBS96 canonicalization, benchmark metrics, and absence of trimming.
+The fixtures are parse/DAG-only: placeholder CRAMs and resources must never be executed. Unit tests cover shared baselines, manifest rejection, build/reference mismatches, exact caller tiers, strand-aware SNV/indel recounting, SBS96 canonicalization, benchmark metrics, and absence of trimming.
 
 ## SEQC2
 
