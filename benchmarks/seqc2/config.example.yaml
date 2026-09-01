@@ -1,0 +1,25 @@
+enabled: false
+reference_build: grch38
+truth_snv_url: https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/seqc/Somatic_Mutation_WG/release/latest/high-confidence_sSNV_in_HC_regions_v1.2.1.vcf.gz
+high_confidence_regions_url: https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/seqc/Somatic_Mutation_WG/release/latest/High-Confidence_Regions_v1.2.bed
+# Fill these from the selected release before download; downloads fail closed without them.
+truth_snv_sha256: null
+high_confidence_regions_sha256: null
+truth_snv: null
+high_confidence_regions: null
+reference: null
+reference_sha256: null
+pipeline_config: null
+output_directory: benchmarks/seqc2/runs
+
+# Supply reviewed HCC1395/HCC1395BL aligned inputs or SRA accessions locally.
+tumour_alignment: null
+tumour_alignment_sha256: null
+baseline_alignment: null
+baseline_alignment_sha256: null
+tumour_input_depth: null
+baseline_input_depth: null
+tumour_target_depth: 6
+baseline_target_depths: [6, 15, 30]
+seeds: [17, 29, 43]
+normal_normal_negative_control: true

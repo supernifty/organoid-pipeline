@@ -1,0 +1,168 @@
+# Snakemake 9 SLURM profile
+# Usage: snakemake --profile config/slurm
+
+# Executor
+executor: slurm
+
+# SLURM default resources
+default-resources:
+  - runtime=60
+  - mem_mb=4096
+
+# Global scheduler token limits for compute-heavy calling shards.
+resources:
+  - mutect2_shards=32
+  - haplotypecaller_shards=16
+
+# Per-rule resource overrides
+set-resources:
+  bwa_mem:
+    runtime: 1920
+    mem_mb: 16384
+  bwa_mem_paired:
+    runtime: 1920
+    mem_mb: 49152
+  mark_duplicates:
+    runtime: 480
+    mem_mb: 49152
+  fastqc:
+    runtime: 360
+    mem_mb: 2048
+  strelka_annotate_af_snvs:
+    runtime: 120
+    mem_mb: 4096
+  strelka_normalize:
+    runtime: 120
+    mem_mb: 8192
+  mutect2_panel_of_normals:
+    runtime: 240
+    mem_mb: 32768
+  mutect2_merge:
+    runtime: 120
+    mem_mb: 8192
+  mutect2_orientation_model:
+    runtime: 120
+    mem_mb: 4096
+  germline_haplotypecaller_shard:
+    runtime: 4320
+    mem_mb: 16384
+  germline_merge_gvcf:
+    runtime: 120
+    mem_mb: 8192
+  germline_genotype:
+    runtime: 720
+    mem_mb: 16384
+  germline_filter:
+    runtime: 240
+    mem_mb: 8192
+  contamination_sites:
+    runtime: 240
+    mem_mb: 4096
+  mutect2_filter:
+    runtime: 720
+    mem_mb: 16384
+  mutect2_normalize:
+    runtime: 120
+    mem_mb: 8192
+  intersect_somatic_callers_raw:
+    runtime: 60
+    mem_mb: 8192
+  intersect_somatic_callers:
+    runtime: 480
+    mem_mb: 8192
+  tissue_signature_definitions:
+    runtime: 30
+    mem_mb: 2048
+  mutational_signature_counts:
+    runtime: 120
+    mem_mb: 8192
+  mutational_signature_tissue_sbs:
+    runtime: 60
+    mem_mb: 4096
+  mutational_signature_tissue_id:
+    runtime: 60
+    mem_mb: 4096
+  strelka_tolerant_indel_signature_vcf:
+    runtime: 60
+    mem_mb: 4096
+  mutational_signature_strelka_tolerant_id_counts:
+    runtime: 120
+    mem_mb: 8192
+  mutational_signature_strelka_tolerant_tissue_id:
+    runtime: 60
+    mem_mb: 4096
+  mutational_signature_tissue_dbs:
+    runtime: 60
+    mem_mb: 4096
+  aggregate_mutational_signature_tissue_sbs:
+    runtime: 30
+    mem_mb: 2048
+  aggregate_mutational_signature_tissue_id:
+    runtime: 30
+    mem_mb: 2048
+  aggregate_mutational_signature_strelka_tolerant_tissue_id:
+    runtime: 30
+    mem_mb: 2048
+  aggregate_mutational_signature_tissue_dbs:
+    runtime: 30
+    mem_mb: 2048
+  aggregate_extended_contexts:
+    runtime: 60
+    mem_mb: 2048
+  aggregate_hotspots:
+    runtime: 30
+    mem_mb: 2048
+  alignment_summary:
+    runtime: 960
+    mem_mb: 16384
+  insert_size:
+    runtime: 720
+    mem_mb: 16384
+  wgs_per_contig_coverage:
+    runtime: 1440
+    mem_mb: 8192
+  exon_gene_coverage:
+    runtime: 1440
+    mem_mb: 8192
+  somalier_extract:
+    runtime: 240
+    mem_mb: 4096
+  somalier_relate:
+    runtime: 60
+    mem_mb: 4096
+  annotate_somatic_vep:
+    runtime: 1440
+    mem_mb: 32768
+  annotate_germline_vep:
+    runtime: 1440
+    mem_mb: 32768
+  multiqc_report:
+    runtime: 240
+    mem_mb: 4096
+  validate_alignment_input:
+    runtime: 60
+    mem_mb: 1024
+  samtools_alignment_qc:
+    runtime: 240
+    mem_mb: 2048
+  caller_tiers:
+    runtime: 60
+    mem_mb: 2048
+  cohort_candidate_union:
+    runtime: 60
+    mem_mb: 2048
+  cohort_allele_recount:
+    runtime: 1440
+    mem_mb: 4096
+  filter_organoid_catalog:
+    runtime: 240
+    mem_mb: 4096
+  sbs96_catalogs:
+    runtime: 120
+    mem_mb: 2048
+
+# Job settings
+jobs: 256
+rerun-triggers: mtime
+rerun-incomplete: true
+printshellcmds: true

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "organoid-pipeline"
+version = "0.1.0"
+description = "Python helpers and tests for the low-pass organoid Snakemake workflow"
+requires-python = ">=3.11"
+dependencies = [
+  "cyvcf2>=0.31",
+  "intervaltree>=3.1",
+  "numpy>=1.25",
+  "pandas>=2.0",
+  "pyyaml>=6.0",
+  "scipy>=1.11",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.12"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["workflow/scripts"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]

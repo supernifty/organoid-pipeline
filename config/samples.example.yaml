@@ -1,0 +1,35 @@
+samples:
+  baseline_1:
+    role: baseline
+    donor: donor_1
+    lineage: lineage_1
+    cram: /path/to/baseline_1.cram
+    crai: /path/to/baseline_1.cram.crai
+    bam_sample: baseline_1
+
+  organoid_1:
+    role: organoid
+    donor: donor_1
+    lineage: lineage_1
+    condition: treated
+    replicate: 1
+    fastq_1: /path/to/organoid_1_R1.fastq.gz
+    fastq_2: /path/to/organoid_1_R2.fastq.gz
+    read_group:
+      platform: ILLUMINA
+      library: organoid_1
+      unit: flowcell.lane
+
+  organoid_2:
+    role: organoid
+    donor: donor_1
+    lineage: lineage_1
+    condition: control
+    cram: /path/to/organoid_2.cram
+    crai: /path/to/organoid_2.cram.crai
+
+comparisons:
+  organoid_1:
+    baseline: baseline_1
+  organoid_2:
+    baseline: baseline_1

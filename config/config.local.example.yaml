@@ -1,0 +1,19 @@
+# Copy to ignored config/config.local.yaml and replace every path.
+reference:
+  genome: /absolute/path/Homo_sapiens_assembly38.fasta
+  genome_dict: /absolute/path/Homo_sapiens_assembly38.dict
+  bwa_index_suffix: ".64"
+  wgs_calling_regions: /absolute/path/wgs_calling_regions.interval_list
+  wgs_exclude_regions: null
+  gnomad: /absolute/path/af-only-gnomad.hg38.vcf.gz
+  population_vcf: /absolute/path/gnomad.population.hg38.vcf.gz
+  contamination_sites: /absolute/path/small_exac_common_3.hg38.vcf.gz
+  panel_of_normals: null
+  problematic_regions: null
+  low_mappability_regions: null
+  repeat_regions: null
+
+container_runtime: apptainer  # Singularity and Docker are also supported.
+
+mutational_signatures:
+  reference_build: grch38

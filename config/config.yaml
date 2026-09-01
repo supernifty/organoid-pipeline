@@ -1,0 +1,272 @@
+pipeline:
+  name: organoid_lowpass_somatic_snv
+  version: 0.1.0
+
+execution:
+  mode: local
+  cores: 8
+  memory_gb: 32
+
+analysis:
+  type: wgs
+  wgs:
+    contigs: ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]
+    target_bases_per_shard: 20000000
+    scatter_count: null
+    max_concurrent_mutect2_shards: 32
+
+# Picard/GATK 4.4 cannot read CRAM 3.1, which samtools 1.23 may write by
+# default. Keep alignment CRAMs on 3.0 until the GATK container is upgraded.
+cram_version: "3.0"
+
+reference:
+  build: grch38
+  genome: resources/reference/grch38/Homo_sapiens_assembly38.fasta
+  genome_dict: resources/reference/grch38/Homo_sapiens_assembly38.dict
+  bwa_index_suffix: ".64"
+  # WES/panel capture targets. WGS uses wgs_calling_regions below.
+  regions: resources/reference/regions.bed.gz
+  regions_source: custom  # vendor, remapped, or custom
+  regions_source_build: grch38
+  regions_metadata: null  # required when regions_source is remapped
+  wgs_calling_regions: resources/reference/grch38/wgs_calling_regions.interval_list
+  wgs_exclude_regions: null
+  gnomad: resources/reference/grch38/af-only-gnomad.hg38.vcf.gz
+  population_vcf: resources/reference/grch38/gnomad.population.hg38.vcf.gz
+  # Preferred sites-only, biallelic SNP resource with population AF annotations.
+  # When null, it is derived and cached from reference.gnomad.
+  contamination_sites: resources/reference/grch38/small_exac_common_3.hg38.vcf.gz
+  panel_of_normals: null
+  problematic_regions: null
+  low_mappability_regions: null
+  repeat_regions: null
+
+container_runtime: singularity  # Options: "apptainer", "singularity", or "docker"
+singularity:
+  images_dir: "resources/images"
+
+strelka:
+  version: "2.9.10"
+  params: ""
+  image: "resources/images/strelka.sif"
+  singularity_image: "resources/images/strelka.sif"
+  docker_image: "quay.io/biocontainers/strelka:2.9.10--0"
+
+gatk:
+  version: "4.4.0.0"
+  image: "resources/images/gatk.sif"
+  singularity_image: "resources/images/gatk.sif"
+  docker_image: "broadinstitute/gatk:4.4.0.0"
+
+germline:
+  enabled: true
+  max_concurrent_haplotypecaller_shards: 16
+  hard_filters:
+    snp:
+      qd_min: 2.0
+      qual_min: 30.0
+      sor_max: 3.0
+      fs_max: 60.0
+      mq_min: 40.0
+      mq_rank_sum_min: -12.5
+      read_pos_rank_sum_min: -8.0
+    indel:
+      qd_min: 2.0
+      qual_min: 30.0
+      fs_max: 200.0
+      read_pos_rank_sum_min: -20.0
+
+# Annotation is deliberately opt-in. Before enabling it, replace every null
+# resource value with locally reviewed metadata and verified SHA-256 checksums.
+annotation:
+  enabled: false
+  version: 116
+  cache_version: 116
+  plugin_release: 116
+  docker_image: "ensemblorg/ensembl-vep@sha256:f354dd8d09073e4d943acbbd02f5eb234a9d9e9d444371c1c349910f2123de11"
+  singularity_image: "resources/images/ensembl-vep-116.0.sif"
+  pick_order: [mane_select, mane_plus_clinical, canonical, appris, tsl, biotype, ccds, rank, length]
+  recurrence_min_carriers: 2
+  resources:
+    cache: &annotation_resource
+      build: grch38
+      version: null
+      path: null
+      expected_sha256: null
+      source: null
+      licence: null
+      access_date: null
+    plugins: {<<: *annotation_resource}
+    clinvar: {<<: *annotation_resource, index: {path: null, expected_sha256: null}}
+    gnomad: {<<: *annotation_resource, index: {path: null, expected_sha256: null}}
+    revel: {<<: *annotation_resource, index: {path: null, expected_sha256: null}}
+    cadd_snv: {<<: *annotation_resource, index: {path: null, expected_sha256: null}}
+    cadd_indel: {<<: *annotation_resource, index: {path: null, expected_sha256: null}}
+    alphamissense: {<<: *annotation_resource, index: {path: null, expected_sha256: null}}
+    spliceai_snv: {<<: *annotation_resource, index: {path: null, expected_sha256: null}}
+    spliceai_indel: {<<: *annotation_resource, index: {path: null, expected_sha256: null}}
+
+picard:
+  image: "resources/images/gatk.sif"
+  singularity_image: "resources/images/gatk.sif"
+  docker_image: "broadinstitute/gatk:4.4.0.0"
+
+mutect2:
+  interval_padding: 1000
+  af_of_alleles_not_in_resource: 0.0000025
+  create_panel_of_normals: false
+  pon_max_mnp_distance: 0
+
+mutational_signatures:
+  reference_build: grch38
+  sbs_definition: tools/mutational_signature/mutational_signature/data/signatures_cosmic_v3.4_sbs.txt
+  id_definition: tools/mutational_signature/mutational_signature/data/signatures_cosmic_v3.2_id.txt
+  dbs_definition: tools/mutational_signature/mutational_signature/data/signatures_cosmic_v3.4_dbs.hg37.txt
+  strelka_tolerant_id:
+    af_threshold: 0.1
+    dp_threshold: 50
+  tissue_signatures:
+    sbs:
+      - SBS1
+      - SBS10a
+      - SBS10b
+      - SBS10c
+      - SBS10d
+      - SBS11
+      - SBS15
+      - SBS17a
+      - SBS17b
+      - SBS18
+      - SBS28
+      - SBS3
+      - SBS30
+      - SBS36
+      - SBS37
+      - SBS44
+      - SBS5
+      - SBS57
+      - SBS88
+      - SBS89
+      - SBS96
+      - SBS2
+      - SBS8
+      - SBS13
+      - SBS93
+      - SBS94
+    id:
+      - ID1
+      - ID2
+      - ID5
+      - ID6
+      - ID7
+      - ID14
+      - ID18
+    dbs:
+      - DBS2
+      - DBS3
+      - DBS4
+      - DBS5
+      - DBS7
+      - DBS8
+      - DBS10
+      - DBS12
+      - DBS19
+
+vt:
+  decompose_params: "-s"
+
+hotspots:
+  reference_build: grch38
+  resource: resources/reference/grch38/hotspots.grch38.tsv
+
+chromosomes:
+  - chr1
+  - chr2
+  - chr3
+  - chr4
+  - chr5
+  - chr6
+  - chr7
+  - chr8
+  - chr9
+  - chr10
+  - chr11
+  - chr12
+  - chr13
+  - chr14
+  - chr15
+  - chr16
+  - chr17
+  - chr18
+  - chr19
+  - chr20
+  - chr21
+  - chr22
+  - chrX
+  - chrY
+
+filtering:
+  min_later_alt_reads: 2
+  later_vaf_threshold: 0.20
+  minimum_baseline_depth: 6
+  maximum_baseline_alt_reads: 1
+  population_af_threshold: 0.001
+  exclude_unrelated_recurrence: true
+  af_threshold: 0.20
+  tumour_dp_threshold: 2
+  normal_dp_threshold: 0
+  final_region_padding: 0
+  max_alt_alleles: 5
+
+coverage:
+  expected_organoid_depth: 6
+  expected_baseline_depth: null
+  depth_warning_fraction: 0.5
+  exon_enabled: false
+  exon_bed:
+    build: grch38
+    version: null
+    path: null
+    expected_sha256: null
+    source: null
+    licence: null
+    access_date: null
+  tumour_complete_coverage_depth: 20
+  normal_complete_coverage_depth: 20
+
+somalier:
+  enabled: false
+  version: "0.3.3"
+  docker_image: "brentp/somalier@sha256:a99d59a80bb24d2d9d4bffc36d891cb6c935fb3ecfb61c240e97a20e19ea7916"
+  singularity_image: "resources/images/somalier-0.3.3.sif"
+  sites_vcf: null
+  sites_vcf_index: null
+  minimum_depth: 20
+  expected_pair_concordance_min: 0.6
+  unexpected_pair_concordance_max: 0.4
+  ancestry:
+    enabled: false
+    labels: null
+    reference_somalier_dir: null
+
+storage:
+  tmp_dir: tmp
+  # Executor-local scratch (for example $SLURM_TMPDIR) may be supplied here.
+  # Relative paths remain beneath the working directory and are container-bound.
+  local_scratch: tmp/local_scratch
+  # Node-local disk requested for each GenomicsDB PoN shard on SLURM.
+  pon_genomicsdb_scratch_mb: 20480
+
+output:
+  directory: results
+  intermediates: tmp
+  logs: logs
+
+cluster:
+  enabled: false
+  account: null
+  partition: null
+  extra: ""
+
+
+pixi_bin: .pixi/envs/default/bin

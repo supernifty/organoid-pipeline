@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Setup script for somatic variant calling pipeline
+# Copy this file to setup.sh and customize for your system
+#
+# Usage:
+#   cp scripts/setup.sh.example scripts/setup.sh
+#   # Edit scripts/setup.sh for your environment
+#   ./scripts/run_cluster.sh
+
+# Install the locked Pixi environment once before using this file. Re-running an
+# environment solver from every SLURM controller is slow and unsafe.
+if ! command -v pixi >/dev/null 2>&1; then
+    echo "ERROR: pixi is not available on PATH" >&2
+    return 1 2>/dev/null || exit 1
+fi
+if [ ! -x .pixi/envs/default/bin/snakemake ]; then
+    echo "ERROR: locked environment is missing; run 'pixi install --locked' first" >&2
+    return 1 2>/dev/null || exit 1
+fi
+eval "$(pixi shell-hook --locked)"
+
+# System modules (uncomment and customize as needed)
+# module load Apptainer
+# module load Singularity
+
+# Additional environment variables (uncomment and customize as needed)
+# Keep cache and temporary files on project storage, not in home or system /tmp.
+# export APPTAINER_CACHEDIR=/shared/projects/YOUR_PROJECT/organoid-work/cache/apptainer
+# export APPTAINER_TMPDIR=/shared/projects/YOUR_PROJECT/organoid-work/tmp/apptainer
+# export PIXI_CACHE_DIR=/shared/projects/YOUR_PROJECT/organoid-work/cache/pixi
+# export UV_CACHE_DIR=/shared/projects/YOUR_PROJECT/organoid-work/cache/uv
+# export TMPDIR=/shared/projects/YOUR_PROJECT/organoid-work/tmp
+
+# Optional SLURM defaults consumed by scripts/run_cluster.sh
+# export SLURM_ACCOUNT=YOUR_ACCOUNT
+# export SLURM_PARTITION=YOUR_PARTITION
+# export SLURM_EXTRA="--qos normal"
+# export SNAKEMAKE_MAX_JOBS=256
+# export SNAKEMAKE_DRIVER_RUNTIME_MIN=1440

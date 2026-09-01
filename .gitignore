@@ -1,0 +1,51 @@
+# Dependencies
+.pixi/
+*.egg-info/
+__pycache__/
+*.pyc
+
+# User setup script (copy from setup.sh.example)
+scripts/setup.sh
+config/samples.yaml
+config/config.local.yaml
+config/samples.sear.*.yaml
+scripts/local/
+
+# Results
+results/
+tmp/
+runs/
+cache/
+
+# Snakemake cache
+.snakemake/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Large reference data (download separately)
+resources/reference/*.fa
+resources/reference/*.fa.fai
+resources/reference/*.fa.amb
+resources/reference/*.fa.ann
+resources/reference/*.fa.bwt
+resources/reference/*.fa.pac
+resources/reference/*.fa.sa
+resources/reference/*.dict
+
+# Test data
+data/test/
+old/
+resources/reference/regions.bed*
+resources/reference/*.index
+resources/reference/*.lengths
+resources/reference/*.md5
+resources/reference/grch38/
+resources/signatures/
+
+# Singularity images (pull via scripts/pull_images.sh)
+resources/images/
