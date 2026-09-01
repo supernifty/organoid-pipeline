@@ -257,3 +257,10 @@ def test_apptainer_runtime_is_supported():
     pull_images = (ROOT / "scripts/pull_images.sh").read_text()
     assert 'runtime in {"apptainer", "singularity"}' in snakefile
     assert "apptainer|singularity)" in pull_images
+
+
+def test_alignment_inputs_are_ignored_by_git():
+    ignore = (ROOT / ".gitignore").read_text().splitlines()
+    assert "/data/" in ignore
+    for pattern in ("*.bam", "*.bai", "*.cram", "*.crai"):
+        assert pattern in ignore

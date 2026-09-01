@@ -37,8 +37,12 @@ resources/reference/*.fa.pac
 resources/reference/*.fa.sa
 resources/reference/*.dict
 
-# Test data
-data/test/
+# Input and generated alignment data
+/data/
+*.bam
+*.bai
+*.cram
+*.crai
 old/
 resources/reference/regions.bed*
 resources/reference/*.index
