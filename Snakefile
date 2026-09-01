@@ -4,7 +4,7 @@ import re
 import sys
 from pathlib import Path
 
-PIPELINE_DIR = os.path.abspath(workflow.basedir)
+PIPELINE_DIR = os.path.realpath(os.path.abspath(workflow.basedir))
 configfile: os.path.join(PIPELINE_DIR, "config/config.yaml")
 
 LOCAL_CONFIG_PATH = os.path.join(PIPELINE_DIR, "config/config.local.yaml")

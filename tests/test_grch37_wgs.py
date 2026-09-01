@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "workflow" / "scripts"))
 
 import downsample_alignment  # noqa: E402
 import provision_grch37  # noqa: E402
+import validate_alignment  # noqa: E402
 from analysis_mode import PRIMARY_CONTIG_LENGTHS  # noqa: E402
 
 
@@ -139,6 +140,27 @@ def test_checked_output_surfaces_external_stderr(monkeypatch):
         downsample_alignment.checked_output(
             ["samtools", "idxstats", "input.bam"], "alignment-index"
         )
+
+
+def test_production_cram_idxstats_uses_supported_reference_option():
+    assert validate_alignment.idxstats_command("input.cram", "/refs/genome.fa") == [
+        "samtools",
+        "idxstats",
+        "--input-fmt-option",
+        "reference=/refs/genome.fa",
+        "input.cram",
+    ]
+
+
+def test_production_preflight_surfaces_external_stderr(monkeypatch):
+    class Failed:
+        returncode = 1
+        stdout = ""
+        stderr = "reference could not be loaded"
+
+    monkeypatch.setattr(validate_alignment.subprocess, "run", lambda *args, **kwargs: Failed())
+    with pytest.raises(ValueError, match="CRAM index.*reference could not be loaded"):
+        validate_alignment.checked_output(["samtools", "idxstats", "input.cram"], "CRAM index")
 
 
 def test_grch37_manifest_is_machine_readable(tmp_path):

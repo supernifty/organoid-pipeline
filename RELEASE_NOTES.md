@@ -9,6 +9,8 @@
   downsampling, plus complete GRCh37 and GRCh38 DAG dry runs.
 - Fixed source-BAM validation for current samtools `idxstats` syntax and made
   external-command failures report their captured stderr.
+- Fixed the same `idxstats` incompatibility in production CRAM preflight and
+  canonicalized helper-script paths across shared-filesystem aliases.
 - Added resumable download progress reporting to both reference provisioners.
 - Expanded the site-neutral SLURM runbook with locked setup, a one-pair/small-territory scheduler smoke run, driver preview, submission, monitoring, and recovery.
 - Added first-class `container_runtime: apptainer` support and explicit binding of external reference directories.

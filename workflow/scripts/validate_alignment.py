@@ -37,17 +37,33 @@ def parse_header(text):
     return sort_order, sequence, samples
 
 
+def checked_output(command, operation):
+    completed = subprocess.run(command, text=True, capture_output=True)
+    if completed.returncode:
+        detail = completed.stderr.strip() or "no stderr was produced"
+        raise ValueError(f"{operation} failed (exit {completed.returncode}): {detail}")
+    return completed.stdout
+
+
+def idxstats_command(cram, reference):
+    return [
+        "samtools",
+        "idxstats",
+        "--input-fmt-option",
+        f"reference={reference}",
+        cram,
+    ]
+
+
 def validate(cram, crai, reference, fai, expected_sample, contigs):
     for path in (cram, crai, reference, fai):
         if not Path(path).is_file() or not os.access(path, os.R_OK):
             raise ValueError(f"Required alignment resource is not readable: {path}")
-    subprocess.run(["samtools", "quickcheck", "-v", cram], check=True)
-    header = subprocess.run(
+    checked_output(["samtools", "quickcheck", "-v", cram], "samtools CRAM quickcheck")
+    header = checked_output(
         ["samtools", "view", "-H", "-T", reference, cram],
-        text=True,
-        capture_output=True,
-        check=True,
-    ).stdout
+        "samtools CRAM header validation",
+    )
     sort_order, sequence, samples = parse_header(header)
     if sort_order != "coordinate":
         raise ValueError(f"{cram} is not coordinate sorted (SO={sort_order!r})")
@@ -59,9 +75,7 @@ def validate(cram, crai, reference, fai, expected_sample, contigs):
     for contig in contigs:
         if sequence.get(contig) != reference_lengths.get(contig):
             raise ValueError(f"{cram} and reference disagree for contig {contig}")
-    subprocess.run(
-        ["samtools", "idxstats", "-T", reference, cram], check=True, stdout=subprocess.DEVNULL
-    )
+    checked_output(idxstats_command(cram, reference), "samtools CRAM index validation")
     return {
         "cram": cram,
         "crai": crai,
