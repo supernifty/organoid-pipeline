@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -129,6 +130,47 @@ def test_idxstats_command_uses_reference_only_for_cram():
     ]
 
 
+def test_downsampling_forces_configured_cram_version():
+    command = downsample_alignment.cram_command(
+        "input.bam", "genome.fa", "output.cram", 8, 0.25, 1723, "3.0"
+    )
+    assert command == [
+        "samtools",
+        "view",
+        "-@",
+        "8",
+        "-T",
+        "genome.fa",
+        "-C",
+        "--output-fmt-option",
+        "version=3.0",
+        "-s",
+        "1723.25",
+        "-o",
+        "output.cram",
+        "input.bam",
+    ]
+
+
+def test_downsampling_command_writes_cram_3_0(tmp_path):
+    reference = tmp_path / "genome.fa"
+    reference.write_text(">1\n" + "A" * 100 + "\n")
+    subprocess.run(["samtools", "faidx", str(reference)], check=True)
+    sam = tmp_path / "input.sam"
+    sam.write_text(
+        "@HD\tVN:1.6\tSO:coordinate\n"
+        "@SQ\tSN:1\tLN:100\n"
+        "@RG\tID:rg\tSM:sample\n"
+        "read1\t0\t1\t1\t60\t10M\t*\t0\t0\tAAAAAAAAAA\tFFFFFFFFFF\tRG:Z:rg\n"
+    )
+    bam = tmp_path / "input.bam"
+    subprocess.run(["samtools", "view", "-b", "-o", str(bam), str(sam)], check=True)
+    cram = tmp_path / "output.cram"
+    command = downsample_alignment.cram_command(bam, reference, cram, 1, 1.0, 1723, "3.0")
+    subprocess.run(command, check=True)
+    assert validate_alignment.cram_version(cram) == "3.0"
+
+
 def test_checked_output_surfaces_external_stderr(monkeypatch):
     class Failed:
         returncode = 1
@@ -150,6 +192,17 @@ def test_production_cram_idxstats_uses_supported_reference_option():
         "reference=/refs/genome.fa",
         "input.cram",
     ]
+
+
+def test_production_preflight_reads_cram_version(tmp_path):
+    cram = tmp_path / "input.cram"
+    cram.write_bytes(b"CRAM\x03\x00fixture")
+    assert validate_alignment.cram_version(cram) == "3.0"
+    cram.write_bytes(b"CRAM\x03\x01fixture")
+    assert validate_alignment.cram_version(cram) == "3.1"
+    cram.write_bytes(b"not-cram")
+    with pytest.raises(ValueError, match="valid CRAM file header"):
+        validate_alignment.cram_version(cram)
 
 
 def test_production_preflight_surfaces_external_stderr(monkeypatch):

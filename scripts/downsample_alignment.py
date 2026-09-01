@@ -129,6 +129,25 @@ def validate_input_reference(alignment, reference, territory):
     }
 
 
+def cram_command(alignment, reference, output, threads, fraction, seed, cram_version):
+    command = [
+        "samtools",
+        "view",
+        "-@",
+        str(threads),
+        "-T",
+        str(reference),
+        "-C",
+        "--output-fmt-option",
+        f"version={cram_version}",
+    ]
+    if fraction < 1:
+        subsample = f"{seed}.{str(fraction).split('.', 1)[1][:8]}"
+        command.extend(("-s", subsample))
+    command.extend(("-o", str(output), str(alignment)))
+    return command
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
@@ -140,6 +159,7 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--report", required=True)
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--cram-version", default="3.0")
     args = parser.parse_args()
     compatibility = validate_input_reference(args.input, args.reference, args.territory)
     fraction = args.target_depth / args.input_depth
@@ -149,11 +169,15 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp.cram")
     # samtools -s hashes the template name, so mates receive the same deterministic decision.
-    command = ["samtools", "view", "-@", str(args.threads), "-T", args.reference, "-C"]
-    if fraction < 1:
-        subsample = f"{args.seed}.{str(fraction).split('.', 1)[1][:8]}"
-        command.extend(("-s", subsample))
-    command.extend(("-o", str(temporary), args.input))
+    command = cram_command(
+        args.input,
+        args.reference,
+        temporary,
+        args.threads,
+        fraction,
+        args.seed,
+        args.cram_version,
+    )
     subprocess.run(command, check=True)
     subprocess.run(["samtools", "index", "-@", str(args.threads), str(temporary)], check=True)
     prefix = output.with_suffix(output.suffix + ".mosdepth")
@@ -184,6 +208,7 @@ def main():
                 "target_depth": args.target_depth,
                 "fraction": fraction,
                 "achieved_depth": achieved,
+                "cram_version": args.cram_version,
                 "reference_compatibility": compatibility,
             },
             indent=2,

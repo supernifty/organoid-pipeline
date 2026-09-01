@@ -11,6 +11,8 @@
   external-command failures report their captured stderr.
 - Fixed the same `idxstats` incompatibility in production CRAM preflight and
   canonicalized helper-script paths across shared-filesystem aliases.
+- Forced deterministic downsampling outputs to configured CRAM 3.0 for pinned
+  GATK compatibility and made preflight reject incompatible cached CRAMs.
 - Added resumable download progress reporting to both reference provisioners.
 - Expanded the site-neutral SLURM runbook with locked setup, a one-pair/small-territory scheduler smoke run, driver preview, submission, monitoring, and recovery.
 - Added first-class `container_runtime: apptainer` support and explicit binding of external reference directories.

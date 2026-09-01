@@ -9,6 +9,7 @@ rule validate_alignment_input:
     benchmark: "results/benchmarks/preflight/{sample}.alignment.tsv"
     params:
         sample=lambda wildcards: bam_sample_name(wildcards.sample),
+        cram_version=config.get("cram_version", "3.0"),
         contigs=" ".join(f"--contig {contig}" for contig in ANALYSIS["contigs"]),
         temporary=tmp_path("preflight", "{sample}.alignment.json")
     threads: 1
@@ -19,6 +20,7 @@ rule validate_alignment_input:
         mkdir -p $(dirname {params.temporary}) $(dirname {log})
         python3 {PIPELINE_DIR}/workflow/scripts/validate_alignment.py --cram {input.cram} --crai {input.crai} \
           --reference {input.reference} --fai {input.fai} --sample {params.sample} {params.contigs} \
+          --cram-version {params.cram_version} \
           --output {params.temporary} > {log} 2>&1
         test -s {params.temporary}; mkdir -p results/qc/preflight; mv {params.temporary} {output}
         """

@@ -55,10 +55,24 @@ def idxstats_command(cram, reference):
     ]
 
 
-def validate(cram, crai, reference, fai, expected_sample, contigs):
+def cram_version(path):
+    with Path(path).open("rb") as handle:
+        header = handle.read(6)
+    if len(header) != 6 or header[:4] != b"CRAM":
+        raise ValueError(f"Alignment does not have a valid CRAM file header: {path}")
+    return f"{header[4]}.{header[5]}"
+
+
+def validate(cram, crai, reference, fai, expected_sample, contigs, expected_cram_version):
     for path in (cram, crai, reference, fai):
         if not Path(path).is_file() or not os.access(path, os.R_OK):
             raise ValueError(f"Required alignment resource is not readable: {path}")
+    observed_cram_version = cram_version(cram)
+    if observed_cram_version != expected_cram_version:
+        raise ValueError(
+            f"{cram} uses CRAM {observed_cram_version}, but the configured tools require "
+            f"CRAM {expected_cram_version}; regenerate the alignment in the configured format"
+        )
     checked_output(["samtools", "quickcheck", "-v", cram], "samtools CRAM quickcheck")
     header = checked_output(
         ["samtools", "view", "-H", "-T", reference, cram],
@@ -81,6 +95,7 @@ def validate(cram, crai, reference, fai, expected_sample, contigs):
         "crai": crai,
         "sample": expected_sample,
         "sort_order": sort_order,
+        "cram_version": observed_cram_version,
         "validated_contigs": contigs,
         "reference_fai_sha256": hashlib.sha256(Path(fai).read_bytes()).hexdigest(),
     }
@@ -94,9 +109,18 @@ def main():
     parser.add_argument("--fai", required=True)
     parser.add_argument("--sample", required=True)
     parser.add_argument("--contig", action="append", required=True)
+    parser.add_argument("--cram-version", default="3.0")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
-    payload = validate(args.cram, args.crai, args.reference, args.fai, args.sample, args.contig)
+    payload = validate(
+        args.cram,
+        args.crai,
+        args.reference,
+        args.fai,
+        args.sample,
+        args.contig,
+        args.cram_version,
+    )
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp")
