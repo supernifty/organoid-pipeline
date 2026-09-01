@@ -113,6 +113,34 @@ def test_alignment_reference_mismatch_is_rejected():
     )
 
 
+def test_idxstats_command_uses_reference_only_for_cram():
+    assert downsample_alignment.idxstats_command("input.bam", "/refs/genome.fa") == [
+        "samtools",
+        "idxstats",
+        "input.bam",
+    ]
+    assert downsample_alignment.idxstats_command("input.cram", "/refs/genome.fa") == [
+        "samtools",
+        "idxstats",
+        "--input-fmt-option",
+        "reference=/refs/genome.fa",
+        "input.cram",
+    ]
+
+
+def test_checked_output_surfaces_external_stderr(monkeypatch):
+    class Failed:
+        returncode = 1
+        stdout = ""
+        stderr = "index is stale"
+
+    monkeypatch.setattr(downsample_alignment.subprocess, "run", lambda *args, **kwargs: Failed())
+    with pytest.raises(RuntimeError, match="alignment-index.*index is stale"):
+        downsample_alignment.checked_output(
+            ["samtools", "idxstats", "input.bam"], "alignment-index"
+        )
+
+
 def test_grch37_manifest_is_machine_readable(tmp_path):
     payload = {
         "bundle": "Broad GRCh37/hg19 v0 plus GATK somatic-b37",

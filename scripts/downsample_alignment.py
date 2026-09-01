@@ -83,26 +83,36 @@ def validate_dictionaries(alignment_lengths, reference_lengths, required_contigs
         )
 
 
+def idxstats_command(alignment, reference):
+    command = ["samtools", "idxstats"]
+    if Path(alignment).suffix.lower() == ".cram":
+        command.extend(("--input-fmt-option", f"reference={reference}"))
+    command.append(str(alignment))
+    return command
+
+
+def checked_output(command, operation):
+    completed = subprocess.run(command, text=True, capture_output=True)
+    if completed.returncode:
+        detail = completed.stderr.strip() or "no stderr was produced"
+        raise RuntimeError(f"{operation} failed (exit {completed.returncode}): {detail}")
+    return completed.stdout
+
+
 def validate_input_reference(alignment, reference, territory):
     fai = Path(f"{reference}.fai")
     if not fai.is_file():
         raise ValueError(f"reference FASTA index is missing: {fai}")
     subprocess.run(["samtools", "quickcheck", "-v", alignment], check=True)
-    header = subprocess.run(
-        ["samtools", "view", "-H", alignment],
-        check=True,
-        text=True,
-        capture_output=True,
-    ).stdout
+    header = checked_output(
+        ["samtools", "view", "-H", alignment], "samtools alignment-header validation"
+    )
     sort_order, alignment_lengths = parse_alignment_header(header)
     if sort_order != "coordinate":
         raise ValueError(f"input alignment is not coordinate sorted (SO={sort_order!r})")
-    idxstats = subprocess.run(
-        ["samtools", "idxstats", "-T", reference, alignment],
-        check=True,
-        text=True,
-        capture_output=True,
-    ).stdout
+    idxstats = checked_output(
+        idxstats_command(alignment, reference), "samtools alignment-index validation"
+    )
     mapped = {}
     for line in idxstats.splitlines():
         fields = line.split("\t")
