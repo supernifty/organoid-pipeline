@@ -146,7 +146,7 @@ pixi run snakemake --dry-run --cores 1
 pixi run run-local
 ```
 
-For SLURM, install the locked environment on shared storage, copy `scripts/setup.sh.example` to the ignored `scripts/setup.sh`, and configure the local account, partition, container module, cache, and temporary paths. Copy the configuration and manifest examples to their ignored local names and use absolute resource/input paths visible from compute nodes:
+For SLURM, install the locked environment on shared storage, copy `scripts/setup.sh.example` to the ignored `scripts/setup.sh`, and configure the local account, partition, ordered module prerequisites, container module, cache, and temporary paths. Some sites require a compiler module before the container-runtime module; follow the order reported by the site module system. Copy the configuration and manifest examples to their ignored local names and use absolute resource/input paths visible from compute nodes:
 
 ```bash
 pixi install --locked

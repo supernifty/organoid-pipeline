@@ -20,7 +20,9 @@ if [ ! -x .pixi/envs/default/bin/snakemake ]; then
 fi
 eval "$(pixi shell-hook --locked)"
 
-# System modules (uncomment and customize as needed)
+# System modules (uncomment and customize as needed). Preserve site-documented
+# prerequisite order; some container-runtime modules require a compiler module.
+# module load SITE_COMPILER_PREREQUISITE
 # module load Apptainer
 # module load Singularity
 

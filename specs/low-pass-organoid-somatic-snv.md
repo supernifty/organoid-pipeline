@@ -245,6 +245,7 @@ Detailed site deployment material belongs under the ignored `scripts/local/` tre
 
 - use the Git remote as the source of code and keep reference, sample, image, cache, run, and log data outside Git;
 - capture the local login/transfer expectations, project allocation, filesystem placement, quota checks, modules, Pixi installation, locked environment creation, and Apptainer setup;
+- load any site-required compiler/runtime prerequisite modules before the container-runtime module, with the exact ordered module stack kept only in the ignored private setup bundle;
 - provide an ignored `scripts/setup.sh`, `config/config.local.yaml`, and `config/samples.yaml` source material without embedding credentials;
 - use absolute paths visible from compute nodes and avoid hardcoding unverified user, account, partition, or storage values;
 - verify the checkout, environment, inputs, images, manifest, DAG, driver preview, submission, state, logs, restart, and retrieval in increasing cost order;
