@@ -91,6 +91,22 @@ Required resources:
 
 Every VCF and interval resource must use the same contig names, order, lengths, and GRCh38 assembly as the FASTA. The preflight compares dictionaries and the canonical GRCh38 primary-contig lengths. Record source version, URL, access date, checksum, and licence alongside locally managed resources. Broad GRCh38 resources are described by the [GATK resource bundle documentation](https://gatk.broadinstitute.org/hc/en-us/articles/360035890811-Resource-bundle).
 
+The repository provides an explicit, plan-first provisioner for the pinned Broad GRCh38 v0 reference and GATK somatic-hg38 resources. Reference acquisition is intentionally separate from `pixi install`: the download is approximately 11.24 GiB, is shared across analyses, and belongs on a filesystem selected by the operator. First inspect the immutable object URLs, sizes, destination, and free-space calculation without changing the destination:
+
+```bash
+pixi run provision-grch38 --destination /absolute/shared/path/grch38
+```
+
+After reviewing the plan, start or resume the verified downloads explicitly:
+
+```bash
+pixi run provision-grch38 --destination /absolute/shared/path/grch38 --execute
+```
+
+The command downloads through `.partial` files, resumes when the server honors byte ranges, verifies the MD5 values published in Google Cloud Storage object metadata, atomically publishes complete files, constructs a primary-contig WGS interval list, validates resource dictionaries, and writes `resource-manifest.json`. It also writes `organoid-pipeline.reference.yaml`; copy its `reference:` mapping into the ignored `config/config.local.yaml`. The initial overlay deliberately uses the same AF-only gnomAD exact-allele VCF for Mutect2 and population filtering, avoiding a second much larger gnomAD download. A newer or more comprehensive exact-allele population resource can be configured later after compatibility review.
+
+The configured paths should be canonical absolute host paths. Their containing directories are mounted into containers automatically; the resources do not need to be embedded in an image or copied into this repository.
+
 Ancestral baselines are never automatically combined into a panel of normals. `reference.panel_of_normals` is optional and must point to an unrelated, reviewed technical PoN.
 
 ## Run
