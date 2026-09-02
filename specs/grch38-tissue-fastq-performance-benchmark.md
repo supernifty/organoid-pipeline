@@ -53,6 +53,12 @@ The benchmark uses:
 - Apptainer containers and the existing native Snakemake SLURM executor;
 - `cram_version: "3.0"` for GATK 4.4/HTSJDK compatibility.
 
+The benchmark-specific configuration must disable germline calling, VEP,
+Somalier, and optional known-signature fitting. SBS96 catalog generation remains
+enabled because it is part of the required somatic output. The benchmark must
+measure the production aligner, callers, resource requests, and concurrency as
+configured; performance tuning is a separate activity.
+
 The public implementation and documentation must remain site-neutral. Exact
 sample identifiers, cluster paths, accounts, partitions, and local module stacks
 belong only in the ignored private scenario under `scripts/local/`.
@@ -64,9 +70,13 @@ described as mutations acquired after an ancestral organoid baseline.
 
 ## Deterministic paired-FASTQ downsampling
 
-Add a site-neutral preparation command with a non-mutating plan mode and an
-explicit execution flag. It must accept R1, R2, output paths, target depth,
-calling territory, seed, threads, and report path.
+Add a site-neutral `scripts/downsample_fastq_pair.py` command with a non-mutating
+plan mode by default and an explicit `--execute` flag. It must accept R1, R2,
+output paths, a sample label, target depth, calling territory, seed, threads,
+and report path. It must also accept an optional calibrated sampling-fraction
+override. The override changes the applied fraction while retaining the
+requested 6× target in provenance; it is used only after measured-depth
+calibration.
 
 Before execution it must:
 
@@ -80,22 +90,34 @@ Before execution it must:
 5. Calculate the initial sampling fraction from target sequenced bases divided
    by observed input sequenced bases and reject a source that cannot supply the
    requested nominal depth.
-6. Estimate output size and verify available capacity with a safety margin
-   before creating task outputs.
+6. Estimate compressed output size and require free space equal to the larger
+   of 1.5 times the estimate or the estimate plus 1 GiB before creating task
+   outputs.
 7. Print the inputs, identities, seed, target, fraction, estimated outputs, and
    capacity without writing outputs unless execution was explicitly requested.
 
-During execution, normalize `/1` and `/2` mate suffixes only for pair identity
-comparison. Select or reject each pair from a stable cryptographic hash of the
-canonical read name and seed. Both mates must always receive the same decision.
-Retained FASTQ records must otherwise be byte-equivalent in identifier,
+During execution, validate and retain records as bytes. Normalize `/1` and `/2`
+mate suffixes only for pair identity comparison. Select or reject each pair
+using an 8-byte BLAKE2b digest of the UTF-8 decimal seed, one NUL byte, and the
+canonical read-name bytes. The canonical name is the first header token without
+the leading `@` or a terminal `/1` or `/2`. Interpret the digest as an unsigned
+big-endian integer, calculate `threshold = floor(fraction × 2^64)`, and retain
+the pair when the digest is less than the threshold. Record this definition as
+selection algorithm version 1. This makes selection stable across Python
+processes and makes lower fractions deterministic subsets of higher fractions
+for the same seed. Both mates must always receive the same decision. Retained
+decompressed FASTQ records must otherwise be byte-equivalent in identifier,
 sequence, separator, and quality content. Adapter and quality trimming are
 forbidden.
 
-Write compressed R1 and R2 through task-specific temporary files, validate both
-streams, and move them atomically to final paths only after success. Compute
-output SHA-256 checksums while writing or validating. Interrupted or invalid
-outputs must not appear complete.
+Use the Pixi-owned `pigz` executable with filename and timestamp metadata
+disabled for deterministic compression. Divide the requested compression
+threads between the two output writers; require at least two threads, allocate
+`floor(threads / 2)` to R1, and allocate the remainder to R2. Write R1 and R2
+through task-specific temporary files, validate both streams, and move them
+atomically to final paths only after success. Compute output SHA-256 checksums
+while writing or validating. Interrupted or invalid outputs must not appear
+complete.
 
 The JSON report must contain at least:
 
@@ -108,6 +130,11 @@ The JSON report must contain at least:
 - calculated sampling fraction and nominal output depth;
 - tool version, command, start/end timestamps, and completion status.
 
+The selection-algorithm field must include a version identifier, digest name,
+digest width, seed encoding, canonical-name rule, and threshold rule. The
+report must distinguish requested target depth, calculated initial fraction,
+any calibrated override, applied fraction, and nominal output depth.
+
 Restart reuse is permitted only when both outputs validate and the report
 matches the current input identities, seed, target, territory identity,
 selection algorithm, and output checksums. Parameter or input changes must
@@ -115,11 +142,13 @@ cause atomic regeneration.
 
 ## Generated manifest and private scenario
 
-Create an ignored private wrapper that invokes the generic downsampler for both
-samples, checks aggregate capacity, and writes a generated sample manifest only
-after both outputs validate. The manifest must contain one R1/R2 pair per
-sample, complete read-group fields, consistent donor/lineage metadata, and one
-case-to-normal comparison.
+Create an ignored private scenario under
+`scripts/local/<site>/scenarios/tissue-fastq-6x/`. Its wrapper invokes the
+generic downsampler for both samples, checks aggregate capacity, and writes a
+generated sample manifest only after both outputs validate. It must expose
+`plan`, `execute`, `manifest`, and `check-calibration` operations. The manifest
+must contain one R1/R2 pair per sample, complete read-group fields, consistent
+donor/lineage metadata, and one case-to-normal comparison.
 
 The wrapper must be restart-safe and must not modify or remove the source
 FASTQs. Generated FASTQs, reports, manifests, and benchmark results must remain
@@ -127,14 +156,22 @@ ignored by Git. The private runbook must provide plan, execution, manifest
 validation, DAG dry-run, calibration, full-run, monitoring, and reporting
 commands.
 
+Calibration attempts must be appended atomically to
+`calibration-history.json`; a later attempt must not overwrite an earlier
+fraction, achieved-depth observation, decision, or adjustment. Exact private
+sample labels, paths, modules, account, partition, and resource overrides must
+remain outside tracked files.
+
 ## Coverage calibration
 
 Nominal sequenced depth is not equivalent to mapped, duplicate-filtered
 autosomal depth. Before launching callers:
 
 1. Start an isolated run-manager batch targeting the two WGS mosdepth summary
-   outputs only. This exercises FastQC, BWA-MEM, coordinate CRAM sorting,
-   MarkDuplicates, preflight, and coverage QC without running callers.
+   outputs and both FastQC completion outputs. Coverage is not downstream of
+   FastQC, so all four targets are required to exercise FastQC, BWA-MEM,
+   coordinate CRAM sorting, MarkDuplicates, preflight, and coverage QC without
+   running callers.
 2. Treat pipeline mosdepth mean autosomal depth as authoritative.
 3. Accept each sample when achieved depth is from 5.4× through 6.6×,
    inclusive.
@@ -145,16 +182,28 @@ autosomal depth. Before launching callers:
 6. Record every attempted fraction and achieved depth; do not overwrite the
    audit history.
 
-Once both samples pass, resume the same batch with the default `rule all`
-target. The validated alignment and QC products should be reused, while the
+When a fraction changes, resume the same calibration batch. Existing
+run-manager reconciliation must retain reusable products for the unchanged
+sample and invalidate alignment-dependent products for the regenerated sample.
+Once both samples pass, resume the same batch without explicit targets so the
+default `rule all` DAG reuses the validated alignment and QC products while the
 remaining callers, catalogs, signatures, aggregate QC, and provenance run
 normally.
 
 ## Performance reporting
 
-Add a site-neutral post-run summarizer that reads the run-manager record,
-effective configuration, analysis manifest, and all Snakemake benchmark TSVs.
-It must emit machine-readable TSV/JSON plus a compact human-readable report.
+Add a site-neutral `scripts/summarize_run_performance.py` command that accepts a
+run-manager batch, the two preparation reports, calibration history, and an
+output prefix. It must read the effective configuration, analysis manifest,
+and all Snakemake benchmark TSVs and emit machine-readable TSV/JSON plus a
+compact Markdown report under the batch aggregate results.
+
+Add benchmark directives to executable rules missing them on the active
+GRCh38 somatic DAG, including FastQC, mosdepth, Picard QC, contamination and
+normalization helpers, MultiQC, and lightweight aggregation stages. Benchmark
+paths must identify the rule and sample or shard unambiguously. The summarizer
+must tolerate repeated benchmark rows and supported Snakemake benchmark column
+aliases.
 
 Report at least:
 
@@ -172,6 +221,12 @@ Report at least:
 - calibration attempts and the distinction between calibration time and the
   remaining full-DAG time;
 - final output sizes and available storage where measurable.
+
+The summarizer may query `sacct` only when explicitly requested. It may use
+controller and discovered child-job identifiers to enrich submission, start,
+end, and state information. Scheduler fields that are absent, ambiguous, or
+unsupported must remain unavailable. Unit and local integration tests must not
+require SLURM or `sacct`.
 
 Parallel job wall times must not be summed and presented as elapsed turnaround.
 Present separately:
@@ -198,24 +253,30 @@ sample-, and concurrency-dependent.
   alignment outputs through existing run-manager fingerprints.
 - Full-pipeline execution must not begin until both samples pass the achieved-
   depth gate.
+- Failure or absence of optional scheduler accounting must not invalidate an
+  otherwise complete pipeline run; the performance report must mark the
+  affected scheduler metrics unavailable.
 
 ## Verification
 
 Verify in increasing cost order:
 
-1. Unit tests for FASTQ parsing, canonical mate names, deterministic pair
-   selection, different seeds, malformed/truncated input, unequal pairs,
-   insufficient source depth, capacity rejection, report identity, checksums,
-   atomic publication, and restart invalidation.
-2. Unit tests for performance aggregation, including parallel wall-time versus
-   elapsed-time handling and missing metrics.
+1. Unit tests for binary FASTQ parsing, newline preservation, canonical mate
+   names, deterministic and nested pair selection, different seeds,
+   malformed/truncated input, unequal pairs, corrupt gzip input, insufficient
+   source depth, capacity rejection, report identity, checksums, atomic
+   publication, and restart invalidation.
+2. Unit tests for performance aggregation, including rule/path grouping,
+   repeated rows, benchmark column aliases, parallel wall-time versus elapsed-
+   time handling, calibration history, optional scheduler data, and missing
+   metrics.
 3. Lint and formatting checks through existing Pixi tasks.
 4. The complete Python test suite.
 5. A synthetic GRCh38 FASTQ DAG dry run proving both samples traverse FastQC,
    BWA-MEM, sorting, MarkDuplicates, CRAM 3.0 preflight, mosdepth, both callers,
    filtering, SBS96, and MultiQC without trimming.
-6. A tiny executable paired-FASTQ integration fixture, if supported by the
-   existing integration-test conventions.
+6. A tiny executable paired-FASTQ integration fixture proving reproducible
+   output and byte-identical retained decompressed records.
 7. Private plan-mode downsampling and capacity review.
 8. Private calibration DAG execution and achieved-depth review.
 9. The full default tissue benchmark and post-run performance report.
@@ -239,3 +300,14 @@ The benchmark is complete when:
 - no site-specific identifiers or large data/results are committed; and
 - documentation explicitly limits conclusions to operational performance on a
   matched GRCh38 tissue pair at approximately 6×.
+
+Repository implementation is accepted after the local unit, lint, format,
+dry-run, and tiny integration checks pass and the remote commands are
+documented. Operational benchmark acceptance additionally requires the
+user-run private capacity review, remote calibration, complete default DAG,
+and generated performance report. Remote data transfer or job submission is
+not part of repository implementation and occurs only under user control.
+
+Pixi owns `pigz` as a native compression dependency. The downsampler and
+summarizer otherwise use the standard library and the existing uv-managed
+Python tooling; no duplicate Python dependency is introduced.
