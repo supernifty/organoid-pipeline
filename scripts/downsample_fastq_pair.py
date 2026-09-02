@@ -13,12 +13,13 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO, Iterator
+from typing import BinaryIO, Callable, Iterator, TextIO
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 GIB = 1024**3
 ALGORITHM = {
     "version": 1,
@@ -38,6 +39,41 @@ class FastqError(RuntimeError):
 class Scan:
     pairs: int
     bases: int
+
+
+@dataclass
+class ProgressReporter:
+    sample: str
+    phase: str
+    total_bytes: int
+    interval_seconds: float = 60.0
+    stream: TextIO = sys.stderr
+    last_reported: float = field(default_factory=time.monotonic)
+
+    def start(self) -> None:
+        print(
+            f"progress sample={self.sample} phase={self.phase} pairs=0 "
+            f"compressed_bytes=0/{self.total_bytes} percent=0.00",
+            file=self.stream,
+            flush=True,
+        )
+
+    def update(self, pairs: int, r1_bytes: int, r2_bytes: int, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and now - self.last_reported < self.interval_seconds:
+            return
+        consumed = min(self.total_bytes, r1_bytes + r2_bytes)
+        percent = 100.0 * consumed / self.total_bytes if self.total_bytes else 100.0
+        print(
+            f"progress sample={self.sample} phase={self.phase} pairs={pairs} "
+            f"compressed_bytes={consumed}/{self.total_bytes} percent={percent:.2f}",
+            file=self.stream,
+            flush=True,
+        )
+        self.last_reported = now
+
+    def finish(self, pairs: int) -> None:
+        self.update(pairs, self.total_bytes, 0, force=True)
 
 
 def utcnow() -> str:
@@ -96,7 +132,17 @@ def records(handle: BinaryIO, label: str) -> Iterator[tuple[bytes, bytes, int]]:
         yield header + sequence + separator + quality, canonical_name(header), len(sequence_value)
 
 
-def paired_records(r1: Path, r2: Path) -> Iterator[tuple[bytes, bytes, bytes, int]]:
+def compressed_position(handle: BinaryIO) -> int:
+    """Return the underlying compressed-stream position for a gzip handle."""
+    raw = getattr(handle, "fileobj", None)
+    return int(raw.tell()) if raw is not None else 0
+
+
+def paired_records(
+    r1: Path,
+    r2: Path,
+    progress: Callable[[int, int, int], None] | None = None,
+) -> Iterator[tuple[bytes, bytes, bytes, int]]:
     try:
         with gzip.open(r1, "rb") as one, gzip.open(r2, "rb") as two:
             left = records(one, str(r1))
@@ -119,18 +165,25 @@ def paired_records(r1: Path, r2: Path) -> Iterator[tuple[bytes, bytes, bytes, in
                         f"FASTQ mates are unsynchronized at pair {pair_number}: "
                         f"{name1!r} != {name2!r}"
                     )
+                if progress is not None:
+                    progress(pair_number, compressed_position(one), compressed_position(two))
                 yield record1, record2, name1, bases1 + bases2
     except (gzip.BadGzipFile, EOFError, OSError) as exc:
         raise FastqError(f"could not read gzip FASTQs: {exc}") from exc
 
 
-def scan_pair(r1: Path, r2: Path) -> Scan:
+def scan_pair(r1: Path, r2: Path, progress: ProgressReporter | None = None) -> Scan:
     pairs = bases = 0
-    for _record1, _record2, _name, pair_bases in paired_records(r1, r2):
+    if progress is not None:
+        progress.start()
+    callback = progress.update if progress is not None else None
+    for _record1, _record2, _name, pair_bases in paired_records(r1, r2, callback):
         pairs += 1
         bases += pair_bases
     if pairs == 0:
         raise FastqError("FASTQ pair contains no records")
+    if progress is not None:
+        progress.finish(pairs)
     return Scan(pairs=pairs, bases=bases)
 
 
@@ -230,6 +283,51 @@ def matching_report(report: Path, expected: dict, output1: Path, output2: Path) 
     return payload
 
 
+def validated_scan(
+    report: Path,
+    r1: Path,
+    r2: Path,
+    sample: str,
+    seed: int,
+    target_depth: float,
+    territory: Path,
+    callable_bases: int,
+    fraction_override: float | None,
+) -> Scan:
+    """Reuse source totals only when a prior plan exactly matches this request."""
+    try:
+        payload = json.loads(report.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise FastqError(f"could not read validated plan {report}: {exc}") from exc
+    expected = {
+        "inputs": [identity(r1), identity(r2)],
+        "sample": sample,
+        "seed": seed,
+        "target_depth": target_depth,
+        "territory": identity(territory),
+        "callable_bases": callable_bases,
+        "selection_algorithm": ALGORITHM,
+        "calibrated_fraction_override": fraction_override,
+    }
+    mismatches = [key for key, value in expected.items() if payload.get(key) != value]
+    if mismatches:
+        raise FastqError(
+            f"validated plan does not match current inputs or parameters: {', '.join(mismatches)}"
+        )
+    pairs = payload.get("input_pairs")
+    bases = payload.get("input_sequenced_bases")
+    if not isinstance(pairs, int) or pairs <= 0 or not isinstance(bases, int) or bases <= 0:
+        raise FastqError("validated plan has invalid source totals")
+    calculated = target_depth * callable_bases / bases
+    applied = fraction_override if fraction_override is not None else calculated
+    if (
+        payload.get("calculated_initial_fraction") != calculated
+        or payload.get("applied_fraction") != applied
+    ):
+        raise FastqError("validated plan has inconsistent sampling fractions")
+    return Scan(pairs=pairs, bases=bases)
+
+
 def atomic_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
@@ -270,27 +368,47 @@ def execute(
     fraction: float,
     seed: int,
     threads: int,
+    sample: str,
+    progress_seconds: float,
 ) -> Scan:
     token = uuid.uuid4().hex
     temporary1 = output1.with_name(f".{output1.name}.{token}.tmp")
     temporary2 = output2.with_name(f".{output2.name}.{token}.tmp")
     writer1 = writer2 = None
-    output_pairs = output_bases = 0
+    output_pairs = output_bases = processed_pairs = 0
     try:
         writer1 = pigz_writer(temporary1, threads // 2)
         writer2 = pigz_writer(temporary2, threads - threads // 2)
         assert writer1.stdin is not None and writer2.stdin is not None
-        for record1, record2, name, pair_bases in paired_records(r1, r2):
+        source_progress = ProgressReporter(
+            sample,
+            "selection",
+            r1.stat().st_size + r2.stat().st_size,
+            progress_seconds,
+        )
+        source_progress.start()
+        for record1, record2, name, pair_bases in paired_records(r1, r2, source_progress.update):
+            processed_pairs += 1
             if selected(name, seed, fraction):
                 writer1.stdin.write(record1)
                 writer2.stdin.write(record2)
                 output_pairs += 1
                 output_bases += pair_bases
+        source_progress.finish(processed_pairs)
         close_writer(writer1)
         writer1 = None
         close_writer(writer2)
         writer2 = None
-        validated = scan_pair(temporary1, temporary2)
+        validated = scan_pair(
+            temporary1,
+            temporary2,
+            ProgressReporter(
+                sample,
+                "output_validation",
+                temporary1.stat().st_size + temporary2.stat().st_size,
+                progress_seconds,
+            ),
+        )
         if validated != Scan(output_pairs, output_bases):
             raise FastqError("temporary output validation totals do not match written totals")
         output1.parent.mkdir(parents=True, exist_ok=True)
@@ -325,6 +443,17 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--threads", type=int, default=2)
     value.add_argument("--report", required=True, type=Path)
     value.add_argument("--sampling-fraction", type=float)
+    value.add_argument(
+        "--validated-plan",
+        type=Path,
+        help="reuse source totals from an exactly matching prior plan during execution",
+    )
+    value.add_argument(
+        "--progress-seconds",
+        type=float,
+        default=60.0,
+        help="minimum interval between progress messages (default: 60)",
+    )
     value.add_argument("--execute", action="store_true")
     return value
 
@@ -341,11 +470,44 @@ def main(argv: list[str] | None = None) -> int:
         raise FastqError("target depth must be positive")
     if args.threads < 2:
         raise FastqError("at least two threads are required")
+    if args.progress_seconds < 0:
+        raise FastqError("progress interval must not be negative")
+    if args.validated_plan is not None and not args.execute:
+        raise FastqError("--validated-plan requires --execute")
     sample = args.sample.strip()
     if not sample:
         raise FastqError("sample label must not be empty")
-    scan = scan_pair(args.r1, args.r2)
     callable_bases = territory_bases(args.territory)
+    if args.validated_plan is None:
+        scan = scan_pair(
+            args.r1,
+            args.r2,
+            ProgressReporter(
+                sample,
+                "validation_count",
+                args.r1.stat().st_size + args.r2.stat().st_size,
+                args.progress_seconds,
+            ),
+        )
+        validated_plan_reused = False
+    else:
+        scan = validated_scan(
+            args.validated_plan,
+            args.r1,
+            args.r2,
+            sample,
+            args.seed,
+            args.target_depth,
+            args.territory,
+            callable_bases,
+            args.sampling_fraction,
+        )
+        validated_plan_reused = True
+        print(
+            f"progress sample={sample} phase=validation_count status=reused pairs={scan.pairs}",
+            file=sys.stderr,
+            flush=True,
+        )
     initial_fraction = args.target_depth * callable_bases / scan.bases
     if initial_fraction > 1:
         raise FastqError(
@@ -375,6 +537,7 @@ def main(argv: list[str] | None = None) -> int:
         "estimated_compressed_output_bytes": estimate,
         "required_free_bytes": required,
         "available_free_bytes": available,
+        "validated_plan_reused": validated_plan_reused,
         "mode": "execute" if args.execute else "plan",
     }
     if not args.execute:
@@ -399,6 +562,8 @@ def main(argv: list[str] | None = None) -> int:
         fraction,
         args.seed,
         args.threads,
+        sample,
+        args.progress_seconds,
     )
     payload = {
         "schema_version": 1,

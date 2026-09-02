@@ -96,6 +96,23 @@ Before execution it must:
 7. Print the inputs, identities, seed, target, fraction, estimated outputs, and
    capacity without writing outputs unless execution was explicitly requested.
 
+The private multi-sample execution wrapper must reuse the input identities,
+pair counts, sequenced-base counts, territory identity, and fractions produced
+by its in-process aggregate planning pass. It must verify that this validated
+plan still matches the current inputs and parameters before selection, and
+must not perform a redundant second counting pass inside each per-sample
+execution. A wrapper execution therefore reads each full source pair twice:
+once for validation/counting and once for deterministic selection. A separate
+standalone plan followed by a later execution is allowed to repeat the planning
+pass because the source identity must be revalidated across processes.
+
+Long source scans and selection passes must emit periodic progress to stderr
+for scheduler logs. Progress must identify the sample and phase and report at
+least processed pair count, compressed bytes consumed, total compressed input
+bytes, and an approximate percentage. Progress reporting must not affect
+selection, output bytes, or provenance, and the reporting interval must be
+configurable for tests and operations.
+
 During execution, validate and retain records as bytes. Normalize `/1` and `/2`
 mate suffixes only for pair identity comparison. Select or reject each pair
 using an 8-byte BLAKE2b digest of the UTF-8 decimal seed, one NUL byte, and the
@@ -265,7 +282,8 @@ Verify in increasing cost order:
    names, deterministic and nested pair selection, different seeds,
    malformed/truncated input, unequal pairs, corrupt gzip input, insufficient
    source depth, capacity rejection, report identity, checksums, atomic
-   publication, and restart invalidation.
+   publication, restart invalidation, validated-plan reuse without a redundant
+   source count, and periodic progress reporting.
 2. Unit tests for performance aggregation, including rule/path grouping,
    repeated rows, benchmark column aliases, parallel wall-time versus elapsed-
    time handling, calibration history, optional scheduler data, and missing

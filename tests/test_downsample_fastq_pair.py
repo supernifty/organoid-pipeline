@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import gzip
+import io
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -121,6 +123,62 @@ def test_plan_writes_nothing_and_reports_capacity(
         payload["required_free_bytes"] >= payload["estimated_compressed_output_bytes"] + fastq.GIB
     )
     assert not (tmp_path / "out").exists()
+
+
+def test_progress_reports_phase_pairs_bytes_and_percent() -> None:
+    stream = io.StringIO()
+    reporter = fastq.ProgressReporter(
+        "CASE", "validation_count", 200, interval_seconds=0, stream=stream
+    )
+    reporter.start()
+    reporter.update(12, 40, 60)
+    reporter.finish(25)
+    output = stream.getvalue()
+    assert "sample=CASE phase=validation_count pairs=12" in output
+    assert "compressed_bytes=100/200 percent=50.00" in output
+    assert "pairs=25 compressed_bytes=200/200 percent=100.00" in output
+
+
+def test_validated_plan_avoids_recounting_sources(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r1, r2, territory = fixture(tmp_path)
+    base = [*arguments(tmp_path, r1, r2, territory), "--sampling-fraction", "0.4"]
+    assert fastq.main(base) == 0
+    plan_path = tmp_path / "validated-plan.json"
+    plan_path.write_text(capsys.readouterr().out)
+
+    original_scan = fastq.scan_pair
+    source_scans = 0
+
+    def tracked_scan(left: Path, right: Path, progress=None):
+        nonlocal source_scans
+        if left == r1 or right == r2:
+            source_scans += 1
+        return original_scan(left, right, progress)
+
+    monkeypatch.setattr(fastq, "scan_pair", tracked_scan)
+    monkeypatch.setattr(fastq, "GIB", 0)
+    assert fastq.main([*base, "--validated-plan", str(plan_path), "--execute"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["validated_plan_reused"] is True
+    assert source_scans == 0
+
+
+def test_validated_plan_rejects_changed_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    r1, r2, territory = fixture(tmp_path)
+    base = [*arguments(tmp_path, r1, r2, territory), "--sampling-fraction", "0.4"]
+    assert fastq.main(base) == 0
+    plan_path = tmp_path / "validated-plan.json"
+    plan_path.write_text(capsys.readouterr().out)
+    stat = r1.stat()
+    os.utime(r1, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
+    with pytest.raises(fastq.FastqError, match="does not match current inputs"):
+        fastq.main([*base, "--validated-plan", str(plan_path), "--execute"])
 
 
 def test_insufficient_source_and_capacity_fail(
