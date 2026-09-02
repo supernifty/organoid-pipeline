@@ -109,6 +109,10 @@ def main():
     )
     pipeline_config_path = require_file(settings.get("pipeline_config"), "pipeline_config")
     pipeline_config = absolute_paths(yaml.safe_load(pipeline_config_path.read_text()))
+    reference_dict = require_file(
+        pipeline_config.get("reference", {}).get("genome_dict"),
+        "pipeline reference.genome_dict",
+    )
     output_root = Path(settings.get("output_directory", "benchmarks/seqc2/runs")).resolve()
     seeds = [int(value) for value in settings["seeds"]]
     baseline_depths = [float(value) for value in settings["baseline_target_depths"]]
@@ -140,6 +144,8 @@ def main():
             str(tumour),
             "--reference",
             str(reference),
+            "--reference-dict",
+            str(reference_dict),
             "--territory",
             str(territory),
             "--input-depth",
@@ -164,6 +170,8 @@ def main():
                     str(baseline),
                     "--reference",
                     str(reference),
+                    "--reference-dict",
+                    str(reference_dict),
                     "--territory",
                     str(territory),
                     "--input-depth",
@@ -195,6 +203,8 @@ def main():
                     str(baseline),
                     "--reference",
                     str(reference),
+                    "--reference-dict",
+                    str(reference_dict),
                     "--territory",
                     str(territory),
                     "--input-depth",

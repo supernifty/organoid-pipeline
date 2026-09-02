@@ -47,6 +47,46 @@ def parse_alignment_header(text):
     return sort_order, sequences
 
 
+def reference_sq_lines(path):
+    lines = []
+    sequences = {}
+    for line in Path(path).read_text().splitlines():
+        if not line.startswith("@SQ\t"):
+            continue
+        values = dict(item.split(":", 1) for item in line.split("\t")[1:] if ":" in item)
+        if "SN" not in values or "LN" not in values or values["SN"] in sequences:
+            raise ValueError(f"invalid reference dictionary @SQ record: {line}")
+        sequences[values["SN"]] = int(values["LN"])
+        lines.append(line)
+    if not lines:
+        raise ValueError(f"reference dictionary has no @SQ records: {path}")
+    return lines, sequences
+
+
+def expanded_header(source_header, reference_dictionary):
+    sort_order, source_sequences = parse_alignment_header(source_header)
+    sq_lines, reference_sequences = reference_sq_lines(reference_dictionary)
+    validate_dictionaries(
+        source_sequences,
+        reference_sequences,
+        list(source_sequences),
+        {contig: 0 for contig in source_sequences},
+    )
+    source_lines = source_header.splitlines()
+    hd_lines = [line for line in source_lines if line.startswith("@HD\t")]
+    if len(hd_lines) > 1:
+        raise ValueError("alignment header contains multiple @HD records")
+    hd = hd_lines[0] if hd_lines else f"@HD\tVN:1.6\tSO:{sort_order or 'unknown'}"
+    other = [line for line in source_lines if not line.startswith(("@HD\t", "@SQ\t"))]
+    return "\n".join([hd, *sq_lines, *other]) + "\n", {
+        "source_sequence_count": len(source_sequences),
+        "output_sequence_count": len(reference_sequences),
+        "reference_dictionary_sha256": hashlib.sha256(
+            Path(reference_dictionary).read_bytes()
+        ).hexdigest(),
+    }
+
+
 def territory_contigs(path):
     opener = gzip.open if str(path).endswith(".gz") else open
     contigs = []
@@ -81,6 +121,29 @@ def validate_dictionaries(alignment_lengths, reference_lengths, required_contigs
             "mapped reads use contigs absent from or incompatible with the configured "
             f"reference: {preview}{suffix}"
         )
+
+
+def expand_cram_dictionary(source, output, reference, reference_dictionary, header_path):
+    source_header = checked_output(
+        ["samtools", "view", "-H", "-T", str(reference), str(source)],
+        "samtools generated-CRAM header inspection",
+    )
+    header, metadata = expanded_header(source_header, reference_dictionary)
+    Path(header_path).write_text(header)
+    with Path(output).open("wb") as handle:
+        completed = subprocess.run(
+            ["samtools", "reheader", "-P", str(header_path), str(source)],
+            stdout=handle,
+            stderr=subprocess.PIPE,
+            text=False,
+        )
+    if completed.returncode:
+        detail = completed.stderr.decode(errors="replace").strip() or "no stderr was produced"
+        raise RuntimeError(
+            f"samtools CRAM dictionary expansion failed (exit {completed.returncode}): {detail}"
+        )
+    subprocess.run(["samtools", "quickcheck", "-v", str(output)], check=True)
+    return metadata
 
 
 def idxstats_command(alignment, reference):
@@ -152,6 +215,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--reference", required=True)
+    parser.add_argument("--reference-dict", required=True)
     parser.add_argument("--territory", required=True)
     parser.add_argument("--input-depth", required=True, type=float)
     parser.add_argument("--target-depth", required=True, type=float)
@@ -167,18 +231,29 @@ def main():
         raise ValueError("target depth must be positive and no greater than measured input depth")
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
+    raw = output.with_suffix(output.suffix + ".raw.cram")
     temporary = output.with_suffix(output.suffix + ".tmp.cram")
+    temporary_header = output.with_suffix(output.suffix + ".expanded-header.sam")
     # samtools -s hashes the template name, so mates receive the same deterministic decision.
     command = cram_command(
         args.input,
         args.reference,
-        temporary,
+        raw,
         args.threads,
         fraction,
         args.seed,
         args.cram_version,
     )
     subprocess.run(command, check=True)
+    dictionary_metadata = expand_cram_dictionary(
+        raw,
+        temporary,
+        args.reference,
+        args.reference_dict,
+        temporary_header,
+    )
+    raw.unlink(missing_ok=True)
+    temporary_header.unlink(missing_ok=True)
     subprocess.run(["samtools", "index", "-@", str(args.threads), str(temporary)], check=True)
     prefix = output.with_suffix(output.suffix + ".mosdepth")
     subprocess.run(
@@ -209,6 +284,7 @@ def main():
                 "fraction": fraction,
                 "achieved_depth": achieved,
                 "cram_version": args.cram_version,
+                **dictionary_metadata,
                 "reference_compatibility": compatibility,
             },
             indent=2,

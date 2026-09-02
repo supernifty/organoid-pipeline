@@ -86,9 +86,14 @@ def validate(cram, crai, reference, fai, expected_sample, contigs, expected_cram
             f"{cram} read-group SM values {sorted(samples)} do not equal {expected_sample!r}"
         )
     reference_lengths = fai_lengths(fai)
+    if list(sequence.items()) != list(reference_lengths.items()):
+        raise ValueError(
+            f"{cram} sequence dictionary does not exactly match the configured reference "
+            f"({len(sequence)} records != {len(reference_lengths)} records, or order/length differs)"
+        )
     for contig in contigs:
-        if sequence.get(contig) != reference_lengths.get(contig):
-            raise ValueError(f"{cram} and reference disagree for contig {contig}")
+        if contig not in sequence:
+            raise ValueError(f"{cram} lacks required analysis contig {contig}")
     checked_output(idxstats_command(cram, reference), "samtools CRAM index validation")
     return {
         "cram": cram,

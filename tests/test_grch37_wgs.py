@@ -154,8 +154,10 @@ def test_downsampling_forces_configured_cram_version():
 
 def test_downsampling_command_writes_cram_3_0(tmp_path):
     reference = tmp_path / "genome.fa"
-    reference.write_text(">1\n" + "A" * 100 + "\n")
+    reference.write_text(">1\n" + "A" * 100 + "\n>2\n" + "C" * 80 + "\n")
     subprocess.run(["samtools", "faidx", str(reference)], check=True)
+    reference_dict = tmp_path / "genome.dict"
+    subprocess.run(["samtools", "dict", "-o", str(reference_dict), str(reference)], check=True)
     sam = tmp_path / "input.sam"
     sam.write_text(
         "@HD\tVN:1.6\tSO:coordinate\n"
@@ -165,10 +167,59 @@ def test_downsampling_command_writes_cram_3_0(tmp_path):
     )
     bam = tmp_path / "input.bam"
     subprocess.run(["samtools", "view", "-b", "-o", str(bam), str(sam)], check=True)
-    cram = tmp_path / "output.cram"
-    command = downsample_alignment.cram_command(bam, reference, cram, 1, 1.0, 1723, "3.0")
+    raw = tmp_path / "raw.cram"
+    command = downsample_alignment.cram_command(bam, reference, raw, 1, 1.0, 1723, "3.0")
     subprocess.run(command, check=True)
+    cram = tmp_path / "output.cram"
+    metadata = downsample_alignment.expand_cram_dictionary(
+        raw,
+        cram,
+        reference,
+        reference_dict,
+        tmp_path / "expanded.sam",
+    )
+    subprocess.run(["samtools", "index", str(cram)], check=True)
     assert validate_alignment.cram_version(cram) == "3.0"
+    header = subprocess.run(
+        ["samtools", "view", "-H", "-T", str(reference), str(cram)],
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
+    assert list(validate_alignment.parse_header(header)[1]) == ["1", "2"]
+    assert metadata["source_sequence_count"] == 1
+    assert metadata["output_sequence_count"] == 2
+    raw_records = subprocess.run(
+        ["samtools", "view", "-T", str(reference), str(raw)],
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
+    expanded_records = subprocess.run(
+        ["samtools", "view", "-T", str(reference), str(cram)],
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
+    assert expanded_records == raw_records
+    payload = validate_alignment.validate(
+        str(cram),
+        f"{cram}.crai",
+        str(reference),
+        f"{reference}.fai",
+        "sample",
+        ["1"],
+        "3.0",
+    )
+    assert payload["cram_version"] == "3.0"
+
+
+def test_header_expansion_rejects_reference_external_source_contig(tmp_path):
+    reference_dict = tmp_path / "genome.dict"
+    reference_dict.write_text("@HD\tVN:1.6\n@SQ\tSN:1\tLN:100\n")
+    source = "@HD\tVN:1.6\tSO:coordinate\n@SQ\tSN:other\tLN:100\n"
+    with pytest.raises(ValueError, match="required contig other"):
+        downsample_alignment.expanded_header(source, reference_dict)
 
 
 def test_checked_output_surfaces_external_stderr(monkeypatch):
