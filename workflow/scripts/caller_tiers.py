@@ -91,7 +91,9 @@ def build_tiers(mutect2, strelka_paths):
                 strelka_pass.setdefault(key, fields)
     both = set(mutect2_pass) & set(strelka_pass)
     union = set(mutect2_pass) | set(strelka_pass)
-    combined = {key: mutect2_pass.get(key, strelka_pass[key]) for key in union}
+    combined = {
+        key: mutect2_pass[key] if key in mutect2_pass else strelka_pass[key] for key in union
+    }
     support = {
         key: "Mutect2,Strelka2" if key in both else "Mutect2" if key in mutect2_pass else "Strelka2"
         for key in union

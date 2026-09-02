@@ -82,11 +82,20 @@ def write_vcf(path, rows):
 
 def test_exact_allele_caller_tiers(tmp_path):
     mutect2, strelka = tmp_path / "m.vcf", tmp_path / "s.vcf"
-    write_vcf(mutect2, ["chr1\t2\t.\tA\tC\t.\tPASS\t.\n", "chr1\t3\t.\tG\tT\t.\tartifact\t.\n"])
+    write_vcf(
+        mutect2,
+        [
+            "chr1\t2\t.\tA\tC\t.\tPASS\tM2=shared\n",
+            "chr1\t3\t.\tG\tT\t.\tPASS\tM2=only\n",
+        ],
+    )
     write_vcf(strelka, ["chr1\t2\t.\tA\tC\t.\tPASS\t.\n", "chr1\t4\t.\tC\tT\t.\tPASS\t.\n"])
     _, m2, st, both, union, support = build_tiers(str(mutect2), [str(strelka)])
-    assert len(m2) == 1 and len(st) == 2 and len(both) == 1 and len(union) == 2
+    assert len(m2) == 2 and len(st) == 2 and len(both) == 1 and len(union) == 3
     assert support[("chr1", 2, "A", "C")] == "Mutect2,Strelka2"
+    assert support[("chr1", 3, "G", "T")] == "Mutect2"
+    assert support[("chr1", 4, "C", "T")] == "Strelka2"
+    assert union[("chr1", 2, "A", "C")][7] == "M2=shared"
 
 
 def test_recount_snv_and_indel_strands():

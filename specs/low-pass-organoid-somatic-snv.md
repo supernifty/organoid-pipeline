@@ -19,6 +19,10 @@ At approximately 6× depth, absence of an alternate read in the baseline is weak
 - Align original paired FASTQs without adapter or quality trimming.
 - Run paired Mutect2 and Strelka2 WGS calls for each organoid–baseline comparison.
 - Produce normalized caller-specific, intersection, union, and caller-only exact-allele tiers.
+  Union construction must accept alleles present in Mutect2 only, Strelka2 only,
+  or both without evaluating a missing lookup in the other caller; shared
+  alleles preferentially retain the Mutect2 record while recording both callers
+  in `CALLER_SUPPORT`.
 - Recount every cohort candidate in relevant samples and preserve quantitative evidence.
 - Apply configurable, reason-coded population, recurrence, baseline, later-sample, and region filters.
 - Produce retained, rejected, shared-lineage, and complete audit catalogs.
@@ -226,7 +230,7 @@ Reported metrics are precision, recall, F1, false positives per callable gigabas
 
 ## Verification and acceptance
 
-Required automated coverage includes manifest and baseline-sharing validation, reference and CRAM compatibility, FASTQ/CRAM resolution, exact-allele normalization, caller-support merge, population AF, recurrence, allele evidence filters, GRCh38 WGS configuration, benchmark metrics, absence of trimming from the active DAG, repository-root-safe helper-script paths for isolated batches, Snakemake dry run, and a miniature end-to-end test.
+Required automated coverage includes manifest and baseline-sharing validation, reference and CRAM compatibility, FASTQ/CRAM resolution, exact-allele normalization, caller-support merge with Mutect2-only, Strelka2-only, and shared alleles, population AF, recurrence, allele evidence filters, GRCh38 WGS configuration, benchmark metrics, absence of trimming from the active DAG, repository-root-safe helper-script paths for isolated batches, Snakemake dry run, and a miniature end-to-end test.
 
 Verification order:
 
