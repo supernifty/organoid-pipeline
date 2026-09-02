@@ -138,9 +138,9 @@ rule wgs_per_contig_coverage:
             --regions {params.prefix}.regions.bed.gz --thresholds {params.prefix}.thresholds.bed.gz \
             --output {params.tmp}
         test -s {params.tmp}
+        test -s {output.regions}
+        test -s {output.thresholds}
         mkdir -p results/qc/coverage
-        mv {params.prefix}.regions.bed.gz {output.regions}
-        mv {params.prefix}.thresholds.bed.gz {output.thresholds}
         mv {params.tmp} {output.mqc}
         """
 

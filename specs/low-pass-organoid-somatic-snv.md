@@ -111,6 +111,8 @@ Validation fails before execution when:
 
 Preflight validation of CRAMs uses samtools against the configured FASTA and fails on an unusable or detached index, non-coordinate sort, conflicting `SM` values, unexpected sample name without an explicit override, reference contig/length mismatch, or absent build evidence. The pipeline uses CRAM directly because the configured Mutect2, Strelka2, samtools, Picard, and mosdepth paths support reference-backed CRAM input.
 
+WGS coverage summarization must accept the documented mosdepth thresholds output, including its column-header row, while rejecting malformed data rows with a line-specific error. The coverage rule must not move a mosdepth regions or thresholds file onto itself: when the mosdepth prefix already names the declared temporary Snakemake outputs, validate those files in place and publish only the separately staged MultiQC summary. Automated coverage must include a header-bearing thresholds fixture and a DAG assertion that the rule contains no same-source/destination move.
+
 ## Reference contract
 
 The primary profile is GRCh38 WGS with one consistent contig convention. Configuration provides FASTA, FAI, sequence dictionary, BWA indexes, AF-only gnomAD for Mutect2, exact-allele population VCF, contamination sites, optional technical PoN, optional masks, WGS territory, and exclusions.
