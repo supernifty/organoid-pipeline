@@ -159,13 +159,13 @@ rule strelka_tolerant_indel_signature_vcf:
     threads: 1
     shell:
         """
-        python3 scripts/annotate_strelka_af.py \
+        python3 {PIPELINE_DIR}/scripts/annotate_strelka_af.py \
             --mode indel \
             --sample {params.sample} \
             --input {input.vcf} \
             --output {params.annotated_vcf}
 
-        python3 scripts/filter_vcf.py \
+        python3 {PIPELINE_DIR}/scripts/filter_vcf.py \
             --input {params.annotated_vcf} \
             --output {params.filtered_vcf} \
             --sample {params.sample} \

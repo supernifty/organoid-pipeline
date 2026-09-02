@@ -2,6 +2,7 @@
 """Create a tiny parse-only fixture for a complete GRCh37 or GRCh38 WGS DAG."""
 
 import argparse
+import gzip
 from pathlib import Path
 
 import yaml
@@ -11,6 +12,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("tmp/codex/dryrun"))
     parser.add_argument("--build", choices=("grch37", "grch38"), default="grch38")
+    parser.add_argument("--input-mode", choices=("cram", "fastq"), default="cram")
     args = parser.parse_args()
     root = args.output
     root.mkdir(parents=True, exist_ok=True)
@@ -59,6 +61,20 @@ def main():
         },
         "comparisons": {"O": {"baseline": "B"}},
     }
+    if args.input_mode == "fastq":
+        for sample in ("B", "O"):
+            samples["samples"][sample].pop("cram")
+            samples["samples"][sample].pop("crai")
+            for mate in (1, 2):
+                fastq = root / f"{sample}_R{mate}.fastq.gz"
+                with gzip.open(fastq, "wt") as handle:
+                    handle.write(f"@{sample}/%d\nA\n+\nI\n" % mate)
+                samples["samples"][sample][f"fastq_{mate}"] = str(fastq)
+            samples["samples"][sample]["read_group"] = {
+                "platform": "ILLUMINA",
+                "library": f"{sample}_LIBRARY",
+                "unit": f"{sample}_UNIT",
+            }
     (root / "samples.yaml").write_text(yaml.safe_dump(samples, sort_keys=False))
     config = yaml.safe_load(Path("config/config.yaml").read_text())
     config["container_runtime"] = "apptainer"

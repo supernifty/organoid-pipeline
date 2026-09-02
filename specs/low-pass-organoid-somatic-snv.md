@@ -158,6 +158,14 @@ For every comparison, Mutect2 receives the organoid as tumour and its early-pass
 
 Strelka2 runs in somatic WGS mode for the same pair and territory. Its normalized indexed SNV and indel outputs retain SomaticEVS and quality fields. Manta is not required for the initial SBS vertical slice.
 
+All tracked helper scripts invoked by workflow rules must be resolved from the
+canonical repository root (`PIPELINE_DIR`), never relative to Snakemake's
+working directory. This is required because isolated run-manager batches use
+`runs/<batch>/` as their working directory and intentionally do not copy the
+repository's `scripts/` tree. The active somatic and optional signature DAGs
+must contain no shell command of the form `python scripts/<helper>.py` or
+`python3 scripts/<helper>.py`.
+
 ### Exact-allele tiers
 
 Records are split and normalized before exact-key comparison using chromosome, position, REF, and ALT. Per organoid outputs are:
@@ -218,7 +226,7 @@ Reported metrics are precision, recall, F1, false positives per callable gigabas
 
 ## Verification and acceptance
 
-Required automated coverage includes manifest and baseline-sharing validation, reference and CRAM compatibility, FASTQ/CRAM resolution, exact-allele normalization, caller-support merge, population AF, recurrence, allele evidence filters, GRCh38 WGS configuration, benchmark metrics, absence of trimming from the active DAG, Snakemake dry run, and a miniature end-to-end test.
+Required automated coverage includes manifest and baseline-sharing validation, reference and CRAM compatibility, FASTQ/CRAM resolution, exact-allele normalization, caller-support merge, population AF, recurrence, allele evidence filters, GRCh38 WGS configuration, benchmark metrics, absence of trimming from the active DAG, repository-root-safe helper-script paths for isolated batches, Snakemake dry run, and a miniature end-to-end test.
 
 Verification order:
 

@@ -10,6 +10,7 @@ rule provenance:
         pyproject=os.path.join(PIPELINE_DIR, "pyproject.toml"),
         uv_lock=os.path.join(PIPELINE_DIR, "uv.lock"),
         slurm=os.path.join(PIPELINE_DIR, "config/slurm/config.yaml")
+    benchmark: "results/benchmarks/aggregate/provenance.tsv"
     params:
         tmp=tmp_path("provenance.tsv"),
         local_config_arg=lambda wildcards, input: f"--config-overlay {input.local_config}" if input.local_config else ""

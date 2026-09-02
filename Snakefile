@@ -477,6 +477,7 @@ rule variants_done:
         variant_outputs()
     output:
         touch("results/variants/variants.done")
+    benchmark: "results/benchmarks/aggregate/variants_done.tsv"
 
 
 rule qc_done:
@@ -485,6 +486,7 @@ rule qc_done:
         somalier_outputs()
     output:
         touch("results/aggregate/qc.done")
+    benchmark: "results/benchmarks/aggregate/qc_done.tsv"
 
 
 rule provenance_done:
@@ -492,6 +494,7 @@ rule provenance_done:
         rules.provenance.output.tsv
     output:
         touch("results/aggregate/provenance.done")
+    benchmark: "results/benchmarks/aggregate/provenance_done.tsv"
 
 
 rule all:

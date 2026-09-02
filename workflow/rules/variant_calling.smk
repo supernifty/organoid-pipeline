@@ -199,6 +199,7 @@ rule analysis_manifest:
         territory_tbi=lambda wildcards: analysis_territory_index(),
         profile=rules.validate_reference_profile.output,
         capture_metadata=lambda wildcards: REFERENCE["capture_metadata"] or []
+    benchmark: "results/benchmarks/aggregate/analysis_manifest.tsv"
     params:
         mode=ANALYSIS_TYPE,
         build=REFERENCE_BUILD,
@@ -543,12 +544,13 @@ rule strelka_annotate_af_snvs:
         tbi=temp(tmp_path("{tumour}.strelka.somatic.snvs.af.vcf.gz.tbi"))
     input:
         vcf="results/variants/{tumour}.strelka.somatic.snvs.vcf.gz"
+    benchmark: "results/benchmarks/strelka/{tumour}.annotate_af.tsv"
     params:
         af_vcf=tmp_path("{tumour}.strelka.somatic.snvs.af.vcf")
     threads: 2
     shell:
         """
-        python3 scripts/annotate_strelka_af.py \
+        python3 {PIPELINE_DIR}/scripts/annotate_strelka_af.py \
             --mode snv \
             --sample TUMOR \
             --input {input.vcf} \
@@ -570,6 +572,7 @@ rule strelka_normalize:
         reference=config["reference"]["genome"],
         snvs=tmp_path("{tumour}.strelka.somatic.snvs.af.vcf.gz"),
         indels="results/variants/{tumour}.strelka.somatic.indels.vcf.gz"
+    benchmark: "results/benchmarks/strelka/{tumour}.normalize.tsv"
     params:
         vt_decompose=config.get("vt", {}).get("decompose_params", "-s")
     threads: 2
@@ -757,6 +760,7 @@ rule contamination_sites:
         territory=lambda wildcards: analysis_territory(),
         territory_tbi=lambda wildcards: analysis_territory_index(),
         reference=config["reference"]["genome"]
+    benchmark: "results/benchmarks/mutect2/contamination_sites.tsv"
     params:
         gatk_cmd=get_container_cmd(config["gatk"]),
         java_options=gatk_java_options("4g"),
@@ -879,6 +883,7 @@ rule mutect2_normalize:
         reference=config["reference"]["genome"],
         vcf=tmp_path("{tumour}.mutect2.filtered.vcf.gz"),
         tbi=tmp_path("{tumour}.mutect2.filtered.vcf.gz.tbi")
+    benchmark: "results/benchmarks/mutect2/{tumour}.normalize.tsv"
     params:
         vt_decompose=config.get("vt", {}).get("decompose_params", "-s"),
         tmp_vcf=tmp_path("{tumour}.mutect2.somatic.vcf.gz")
@@ -905,12 +910,13 @@ rule intersect_somatic_callers_raw:
         strelka_snvs_tbi=tmp_path("{tumour}.strelka.somatic.snvs.af.norm.vcf.gz.tbi"),
         strelka_indels=tmp_path("{tumour}.strelka.somatic.indels.norm.vcf.gz"),
         strelka_indels_tbi=tmp_path("{tumour}.strelka.somatic.indels.norm.vcf.gz.tbi")
+    benchmark: "results/benchmarks/caller_tiers/{tumour}.raw_intersection.tsv"
     params:
         raw_vcf=lambda wildcards: tmp_path(f"{wildcards.tumour}.intersect.raw.vcf")
     threads: 2
     shell:
         """
-        python3 scripts/vcf_intersect.py \
+        python3 {PIPELINE_DIR}/scripts/vcf_intersect.py \
             --mutect2-vcf {input.mutect2} \
             --strelka-vcf {input.strelka_snvs} {input.strelka_indels} \
             --allowed-filters str_contraction LowDepth \
@@ -934,6 +940,7 @@ rule intersect_somatic_callers:
         reference=config["reference"]["genome"],
         final_regions=lambda wildcards: [] if sample_has_final_vcf(wildcards.tumour) else rules.final_filter_regions.output.bed,
         final_regions_tbi=lambda wildcards: [] if sample_has_final_vcf(wildcards.tumour) else rules.final_filter_regions.output.tbi
+    benchmark: "results/benchmarks/caller_tiers/{tumour}.filtered_intersection.tsv"
     params:
         final_vcf_mode=lambda wildcards: "true" if sample_has_final_vcf(wildcards.tumour) else "false",
         gatk_cmd=get_container_cmd(config["gatk"]),
@@ -965,7 +972,7 @@ rule intersect_somatic_callers:
                 -V /data/{input.vcf} \
                 -O /data/{params.depth_vcf}
 
-            python3 scripts/filter_vcf.py \
+            python3 {PIPELINE_DIR}/scripts/filter_vcf.py \
                 --input {params.depth_vcf} \
                 --output {params.filtered_vcf} \
                 --tumour-sample {params.tumour_bam_sample} \

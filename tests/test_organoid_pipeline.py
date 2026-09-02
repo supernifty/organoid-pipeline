@@ -1,4 +1,5 @@
 import csv
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,17 @@ from benchmark_metrics import cosine_similarity, metrics  # noqa: E402
 from caller_tiers import build_tiers  # noqa: E402
 from sample_inputs import comparison_map, matched_normal_samples, validate_samples  # noqa: E402
 from sbs96 import canonical_channel  # noqa: E402
+
+
+def test_workflow_helper_scripts_are_repository_root_safe():
+    workflow_sources = [ROOT / "Snakefile", *sorted((ROOT / "workflow/rules").glob("*.smk"))]
+    unsafe = []
+    pattern = re.compile(r"\bpython3?\s+scripts/[A-Za-z0-9_.-]+\.py")
+    for path in workflow_sources:
+        for line_number, line in enumerate(path.read_text().splitlines(), 1):
+            if pattern.search(line):
+                unsafe.append(f"{path.relative_to(ROOT)}:{line_number}: {line.strip()}")
+    assert unsafe == []
 
 
 def manifest():

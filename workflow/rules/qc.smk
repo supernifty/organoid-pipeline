@@ -31,6 +31,7 @@ rule alignment_summary:
         ref=config["reference"]["genome"],
         cram=lambda wildcards: aligned_cram(wildcards.sample),
         crai=lambda wildcards: aligned_cram_index(wildcards.sample)
+    benchmark: "results/benchmarks/qc/{sample}.alignment_summary.tsv"
     params:
         gatk_cmd=get_container_cmd(config["gatk"]),
         ref_container=container_path(config["reference"]["genome"]),
@@ -57,6 +58,7 @@ rule insert_size:
         cram=lambda wildcards: aligned_cram(wildcards.sample),
         crai=lambda wildcards: aligned_cram_index(wildcards.sample),
         ref=config["reference"]["genome"]
+    benchmark: "results/benchmarks/qc/{sample}.insert_size.tsv"
     params:
         gatk_cmd=get_container_cmd(config["gatk"]),
         ref_container=container_path(config["reference"]["genome"]),
@@ -84,6 +86,7 @@ rule final_variant_counts_qc:
         "results/qc/variants/final_variant_counts_mqc.tsv"
     input:
         vcfs=variant_outputs()
+    benchmark: "results/benchmarks/aggregate/final_variant_counts.tsv"
     params:
         inputs=lambda wildcards: " ".join(
             f"--input {tumour}=results/catalogs/{tumour}.stringent.vcf.gz"
@@ -113,6 +116,7 @@ rule wgs_per_contig_coverage:
         territory=lambda wildcards: analysis_territory(),
         territory_tbi=lambda wildcards: analysis_territory_index(),
         manifest=rules.analysis_manifest.output
+    benchmark: "results/benchmarks/qc/{sample}.wgs_coverage.tsv"
     params:
         prefix=tmp_path("coverage", "wgs", "{sample}"),
         tmp=tmp_path("{sample}.wgs_coverage_mqc.tsv"),
@@ -150,6 +154,7 @@ rule prepare_exon_coverage_bed:
         temp(tmp_path("coverage", "exons.bed"))
     input:
         lambda wildcards: config["coverage"]["exon_bed"]["path"]
+    benchmark: "results/benchmarks/qc/prepare_exon_coverage_bed.tsv"
     threads: 1
     shell:
         """
@@ -168,6 +173,7 @@ rule exon_gene_coverage:
         crai=lambda wildcards: aligned_cram_index(wildcards.sample),
         reference=config["reference"]["genome"],
         bed=rules.prepare_exon_coverage_bed.output
+    benchmark: "results/benchmarks/qc/{sample}.exon_coverage.tsv"
     params:
         prefix=tmp_path("coverage", "exon", "{sample}"),
         exon_tmp=tmp_path("coverage", "exon", "{sample}.exon.tsv"),
@@ -211,6 +217,7 @@ rule multiqc_report:
             if config.get("coverage", {}).get("exon_enabled", False) else []
         ),
         somalier=somalier_outputs()
+    benchmark: "results/benchmarks/aggregate/multiqc.tsv"
     params:
         outdir=tmp_path("multiqc"),
         html=tmp_path("multiqc", "qc_summary.html")
