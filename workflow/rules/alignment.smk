@@ -35,7 +35,7 @@ rule bwa_mem_paired:
     threads: 32
     resources:
         mem_mb=49152,
-        runtime=1920,
+        runtime=1440,
         disk_mb=lambda wildcards, input: max(8192, int(input.size_mb * 2.5))
     shell:
         r"""

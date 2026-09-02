@@ -17,10 +17,10 @@ resources:
 # Per-rule resource overrides
 set-resources:
   bwa_mem:
-    runtime: 1920
+    runtime: 1440
     mem_mb: 16384
   bwa_mem_paired:
-    runtime: 1920
+    runtime: 1440
     mem_mb: 49152
   mark_duplicates:
     runtime: 480
@@ -37,6 +37,18 @@ set-resources:
   mutect2_panel_of_normals:
     runtime: 240
     mem_mb: 32768
+  mutect2_sample_pon_chromosome:
+    runtime: 720
+    mem_mb: 16384
+  mutect2_pon_shard:
+    runtime: 720
+    mem_mb: 16384
+  mutect2_chromosome:
+    runtime: 720
+    mem_mb: 16384
+  strelka_somatic:
+    runtime: 1440
+    mem_mb: 32768
   mutect2_merge:
     runtime: 120
     mem_mb: 8192
@@ -44,7 +56,7 @@ set-resources:
     runtime: 120
     mem_mb: 4096
   germline_haplotypecaller_shard:
-    runtime: 4320
+    runtime: 1440
     mem_mb: 16384
   germline_merge_gvcf:
     runtime: 120

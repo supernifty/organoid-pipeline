@@ -298,7 +298,7 @@ rule mutect2_sample_pon_chromosome:
     resources:
         mutect2_shards=1,
         mem_mb=16384,
-        runtime=4320 if ANALYSIS_TYPE == "wgs" else 2880
+        runtime=720
     shell:
         """
         {params.gatk_cmd} \
@@ -387,7 +387,7 @@ rule mutect2_pon_shard:
     resources:
         mutect2_shards=1,
         mem_mb=16384,
-        runtime=4320 if ANALYSIS_TYPE == "wgs" else 2880,
+        runtime=720,
         slurm_extra=pon_shard_slurm_extra()
     shell:
         """
@@ -505,7 +505,7 @@ rule strelka_somatic:
     resources:
         disk_mb=lambda wildcards, input: max(16384, int(input.size_mb * 0.75)),
         mem_mb=32768,
-        runtime=2880 if ANALYSIS_TYPE == "wgs" else 360
+        runtime=1440 if ANALYSIS_TYPE == "wgs" else 360
     shell:
         """
         mkdir -p {params.run_dir} $(dirname {log})
@@ -640,7 +640,7 @@ rule mutect2_chromosome:
     resources:
         mutect2_shards=1,
         mem_mb=16384,
-        runtime=4320 if ANALYSIS_TYPE == "wgs" else 2880
+        runtime=720
     shell:
         """
         mkdir -p $(dirname {log})

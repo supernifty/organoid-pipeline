@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
+import fcntl
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -22,6 +23,11 @@ def write_yaml(path: Path, value: dict) -> None:
 def managed_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     root = tmp_path / "repo"
     (root / "config").mkdir(parents=True)
+    (root / "Snakefile").write_text("rule all:\n    input: []\n")
+    snakemake = root / ".pixi/envs/default/bin/snakemake"
+    snakemake.parent.mkdir(parents=True)
+    snakemake.write_text("#!/bin/sh\nexit 0\n")
+    snakemake.chmod(0o755)
     genome = root / "reference/genome.fa"
     regions = root / "reference/regions.bed.gz"
     genome.parent.mkdir()
@@ -209,20 +215,87 @@ def test_controller_states_and_target_never_completes(managed_repo: tuple[Path, 
     assert manager.load_record("failure")["state"] == "failed"
 
 
-def test_stale_recovery_is_explicit(managed_repo: tuple[Path, Path]) -> None:
-    _, samples = managed_repo
+def test_stale_recovery_is_explicit(
+    managed_repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, samples = managed_repo
     prepared = prep("stale", samples)
     manager.transition("stale", prepared["launch"], "submitted", "123")
     with pytest.raises(manager.RunError, match="recover it explicitly"):
         prep("stale", None, resume=True)
+    commands = []
+
+    def unlocked(command, **kwargs):
+        commands.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, "Unlocked working directory.\n", "")
+
+    monkeypatch.setattr(manager.subprocess, "run", unlocked)
     manager.recover("stale")
-    assert manager.load_record("stale")["state"] == "failed"
+    record = manager.load_record("stale")
+    assert record["state"] == "failed"
+    unlock = record["recoveries"][-1]["snakemake_unlock"]
+    assert unlock["outcome"] == "complete"
+    assert unlock["stdout"] == "Unlocked working directory."
+    assert commands[0][0] == [
+        str(root / ".pixi/envs/default/bin/snakemake"),
+        "--snakefile",
+        str(root / "Snakefile"),
+        "--directory",
+        str(root / "runs/stale"),
+        "--configfile",
+        str(root / "runs/stale/config/current/config.yaml"),
+        "--cores",
+        "1",
+        "--unlock",
+    ]
+    assert commands[0][1] == {"text": True, "capture_output": True, "check": False}
     prep("stale", None, resume=True)
+
+
+def test_stale_recovery_unlock_failure_remains_active(
+    managed_repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, samples = managed_repo
+    prepared = prep("unlock-failure", samples)
+    manager.transition("unlock-failure", prepared["launch"], "submitted", "456")
+
+    def locked(command, **kwargs):
+        return subprocess.CompletedProcess(command, 1, "", "directory is locked")
+
+    monkeypatch.setattr(manager.subprocess, "run", locked)
+    with pytest.raises(manager.RunError, match="directory is locked"):
+        manager.recover("unlock-failure")
+    record = manager.load_record("unlock-failure")
+    assert record["state"] == "submitted"
+    unlock = record["recoveries"][-1]["snakemake_unlock"]
+    assert unlock["outcome"] == "failed"
+    assert unlock["error"] == "Snakemake unlock failed (exit 1): directory is locked"
+    assert unlock["command"][-1] == "--unlock"
+
+
+def test_stale_recovery_refuses_held_controller_lock(
+    managed_repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, samples = managed_repo
+    prepared = prep("active-controller", samples)
+    manager.transition("active-controller", prepared["launch"], "running", "789")
+    monkeypatch.setattr(
+        manager.subprocess,
+        "run",
+        lambda *args, **kwargs: pytest.fail("Snakemake must not run while controller lock is held"),
+    )
+    with (root / "runs/active-controller/controller.lock").open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(manager.RunError, match="controller lock is still held"):
+            manager.recover("active-controller")
+    record = manager.load_record("active-controller")
+    assert record["state"] == "running"
+    assert "recoveries" not in record
 
 
 def test_mocked_scheduler_reconciliation_never_infers_completion(managed_repo: tuple[Path, Path]) -> None:
     _, samples = managed_repo
-    prepared = prep("scheduler", samples)
+    prep("scheduler", samples)
     manager.reconcile_scheduler("scheduler", "PENDING")
     assert manager.load_record("scheduler")["state"] == "submitted"
     manager.reconcile_scheduler("scheduler", "RUNNING")

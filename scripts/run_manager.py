@@ -20,7 +20,6 @@ from typing import Any, Iterable
 
 import yaml
 
-
 SCHEMA_VERSION = 1
 BATCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 ACTIVE_STATES = {"submitted", "running"}
@@ -575,6 +574,45 @@ def controller(args: argparse.Namespace) -> int:
         return completed.returncode
 
 
+def snakemake_unlock_command(directory: Path) -> list[str]:
+    root = repository_root()
+    executable = root / ".pixi/envs/default/bin/snakemake"
+    snakefile = root / "Snakefile"
+    config = directory / "config/current/config.yaml"
+    for path, description in (
+        (executable, "pinned Snakemake executable"),
+        (snakefile, "pipeline Snakefile"),
+        (config, "batch configuration"),
+    ):
+        if not path.is_file():
+            raise RunError(f"cannot unlock Snakemake: {description} is missing: {path}")
+    return [
+        str(executable),
+        "--snakefile",
+        str(snakefile),
+        "--directory",
+        str(directory),
+        "--configfile",
+        str(config),
+        "--cores",
+        "1",
+        "--unlock",
+    ]
+
+
+def unlock_snakemake(command: list[str]) -> dict[str, Any]:
+    completed = subprocess.run(command, text=True, capture_output=True, check=False)
+    if completed.returncode:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "no diagnostic was produced"
+        raise RunError(f"Snakemake unlock failed (exit {completed.returncode}): {detail}")
+    return {
+        "command": command,
+        "outcome": "complete",
+        "stdout": completed.stdout.strip(),
+        "stderr": completed.stderr.strip(),
+    }
+
+
 def recover(batch: str) -> None:
     directory = run_dir(batch)
     record = load_record(batch)
@@ -585,7 +623,32 @@ def recover(batch: str) -> None:
             raise RunError("controller lock is still held; recovery refused") from exc
         if record.get("state") not in ACTIVE_STATES:
             raise RunError(f"batch state is not stale-active: {record.get('state')}")
-        record.setdefault("recoveries", []).append({"at": utcnow(), "previous_state": record["state"]})
+        recovery = {"at": utcnow(), "previous_state": record["state"]}
+        record.setdefault("recoveries", []).append(recovery)
+        try:
+            command = snakemake_unlock_command(directory)
+        except RunError as exc:
+            recovery["snakemake_unlock"] = {
+                "command": None,
+                "outcome": "failed",
+                "error": str(exc),
+            }
+            record["last_error"] = str(exc)
+            save_record(batch, record)
+            raise
+        recovery["snakemake_unlock"] = {"command": command, "outcome": "attempted"}
+        save_record(batch, record)
+        try:
+            recovery["snakemake_unlock"] = unlock_snakemake(command)
+        except RunError as exc:
+            recovery["snakemake_unlock"] = {
+                "command": command,
+                "outcome": "failed",
+                "error": str(exc),
+            }
+            record["last_error"] = str(exc)
+            save_record(batch, record)
+            raise
         record["active_controller"] = None
         record["last_error"] = "explicit stale-controller recovery"
         record["state"] = "failed"

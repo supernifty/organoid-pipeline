@@ -104,7 +104,7 @@ rule germline_haplotypecaller_shard:
     resources:
         haplotypecaller_shards=1,
         mem_mb=16384,
-        runtime=4320 if ANALYSIS_TYPE == "wgs" else 2880
+        runtime=1440
     shell:
         """
         mkdir -p $(dirname {params.publish})

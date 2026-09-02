@@ -255,6 +255,35 @@ Detailed site deployment material belongs under the ignored `scripts/local/` tre
 - provide a small one-comparison territory test and clearly distinguish it from the non-executable placeholder fixture;
 - document safe update and recovery without deleting previous results.
 
+Stale-controller recovery must also clear the isolated batch's Snakemake
+working-directory lock, but only inside the guarded `run_manager.py recover`
+path. Recovery must first acquire the non-blocking batch controller lock and
+require a `submitted` or `running` run-manager state; it must refuse to invoke
+Snakemake while a controller still owns that lock. It must then call the pinned
+Pixi Snakemake executable with the repository Snakefile, batch directory, and
+batch's current immutable configuration plus `--unlock`. A successful unlock
+marks the stale launch failed and permits a later explicit `--resume`. A failed
+unlock leaves the batch stale-active, returns a non-zero error with Snakemake's
+diagnostic, and must not silently authorize resume. Every recovery attempt must
+record its timestamp, previous state, unlock command, outcome, and error when
+present in batch provenance. A guarded unlock attempt after the Snakemake lock
+has already been cleared manually must be harmless. Unit tests must cover successful unlock,
+unlock failure, provenance, and refusal while the controller lock is held.
+
+The site-neutral SLURM defaults must request walltimes that schedulers can place
+for low-depth WGS rather than multi-day conservative maxima. Mutect2 calling
+and PoN shards default to 720 minutes, while whole-genome Strelka, paired FASTQ
+alignment, and optional HaplotypeCaller shards default to at most 1,440
+minutes. The rule declarations and native SLURM profile must agree so direct and
+profile execution do not diverge. Lower existing limits remain unchanged, and
+operators may override a specific rule with Snakemake `--set-resources` when
+measured site/sample performance justifies it. Tests must assert the capped
+defaults for the named rules. Applying changed walltimes to a failed batch must
+not delete completed outputs: after all old controller and child jobs are
+confirmed stopped, pull the new revision, run guarded recovery only if the
+batch is still stale-active, then explicitly resume so newly submitted jobs use
+the current resource declarations.
+
 Acceptance requires the public README and tracked examples to remain site-neutral, ignored private deployment files to be excluded by `git status`, shell syntax checks for changed scripts, the Python test suite, and a complete synthetic DAG dry run. The user executes remote commands interactively; authentication, allocation, data, or reference gaps must be reported rather than guessed.
 
 The first private real-data scenario uses one existing high-depth organoid–baseline alignment pair. Preparation must validate and index the completed source BAMs, measure source depth over the configured full-WGS territory, estimate output storage, deterministically downsample both members to 6× while preserving read-pair sampling decisions, measure achieved depth, validate/index the resulting CRAMs, and generate a manifest using the actual alignment-header sample names. Generated CRAMs must use the configured CRAM 3.0 format required by the pinned GATK/HTSJDK version; the format version must be recorded in restart metadata so an older cached CRAM 3.1 output is regenerated rather than reused. If a verified legacy source header contains a strict subset of the configured reference sequences, every source sequence name and length must first match the reference, then the generated analysis CRAM header must be expanded with the exact ordered `@SQ` records from the configured reference dictionary. Adding unused dictionary entries must not alter reads, coordinates, flags, read groups, or sample names. A conflicting or reference-external source sequence is fatal. The generated report must record source and output dictionary counts and reference-dictionary identity so a cached subset-header CRAM is regenerated. Production alignment preflight must read the CRAM file header directly and require both the configured format version and the complete ordered reference dictionary before any GATK/Picard rule runs. Both preparation validation and the production alignment-preflight rule must invoke `samtools idxstats` according to the input format: BAM must not receive CRAM/reference-only flags, while CRAM must receive the configured FASTA through htslib's documented input-format option. A failed external validation command must surface its stderr and the failed operation rather than only emitting a Python `CalledProcessError`. The analysis runs the normal default target so the deliverables include caller-specific and stringent variant calls plus the Mutect2, Strelka2, intersection, and stringent SBS96 context matrix. Source and generated BAM/CRAM data must be globally ignored by Git.

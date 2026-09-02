@@ -259,6 +259,36 @@ def test_apptainer_runtime_is_supported():
     assert "apptainer|singularity)" in pull_images
 
 
+def test_slurm_walltimes_are_placeable_for_low_depth_wgs():
+    profile = yaml.safe_load((ROOT / "config/slurm/config.yaml").read_text())["set-resources"]
+    for rule in (
+        "mutect2_sample_pon_chromosome",
+        "mutect2_pon_shard",
+        "mutect2_chromosome",
+    ):
+        assert profile[rule]["runtime"] == 720
+    for rule in ("bwa_mem", "bwa_mem_paired", "strelka_somatic", "germline_haplotypecaller_shard"):
+        assert profile[rule]["runtime"] == 1440
+
+    variant_rules = (ROOT / "workflow/rules/variant_calling.smk").read_text()
+    for rule in (
+        "mutect2_sample_pon_chromosome",
+        "mutect2_pon_shard",
+        "mutect2_chromosome",
+    ):
+        body = variant_rules.split(f"rule {rule}:", 1)[1].split("\nrule ", 1)[0]
+        assert "runtime=720" in body
+    strelka = variant_rules.split("rule strelka_somatic:", 1)[1].split("\nrule ", 1)[0]
+    assert 'runtime=1440 if ANALYSIS_TYPE == "wgs" else 360' in strelka
+    alignment = (ROOT / "workflow/rules/alignment.smk").read_text()
+    assert "runtime=1440" in alignment.split("rule bwa_mem_paired:", 1)[1].split("\nrule ", 1)[0]
+    germline = (ROOT / "workflow/rules/germline.smk").read_text()
+    assert (
+        "runtime=1440"
+        in germline.split("rule germline_haplotypecaller_shard:", 1)[1].split("\nrule ", 1)[0]
+    )
+
+
 def test_alignment_inputs_are_ignored_by_git():
     ignore = (ROOT / ".gitignore").read_text().splitlines()
     assert "/data/" in ignore

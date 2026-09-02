@@ -17,6 +17,10 @@
   dictionary and made production preflight enforce full ordered equality.
 - Made WGS coverage summarization accept the mosdepth thresholds header and
   removed invalid same-path publication moves from the coverage rule.
+- Made guarded stale-controller recovery clear and provenance-record the
+  isolated batch's Snakemake lock before an explicit resume.
+- Reduced multi-day WGS caller and alignment walltime defaults to placeable
+  12-hour shard and 24-hour whole-genome requests.
 - Added resumable download progress reporting to both reference provisioners.
 - Expanded the site-neutral SLURM runbook with locked setup, a one-pair/small-territory scheduler smoke run, driver preview, submission, monitoring, and recovery.
 - Added first-class `container_runtime: apptainer` support and explicit binding of external reference directories.
