@@ -25,9 +25,11 @@ set-resources:
   mark_duplicates:
     runtime: 480
     mem_mb: 49152
+  split_wgs_intervals:
+    mem_mb: 8192
   fastqc:
     runtime: 360
-    mem_mb: 2048
+    mem_mb: 4096
   strelka_annotate_af_snvs:
     runtime: 120
     mem_mb: 4096
@@ -54,7 +56,7 @@ set-resources:
     mem_mb: 8192
   mutect2_orientation_model:
     runtime: 120
-    mem_mb: 4096
+    mem_mb: 8192
   germline_haplotypecaller_shard:
     runtime: 1440
     mem_mb: 16384
@@ -69,7 +71,7 @@ set-resources:
     mem_mb: 8192
   contamination_sites:
     runtime: 240
-    mem_mb: 4096
+    mem_mb: 8192
   mutect2_filter:
     runtime: 720
     mem_mb: 16384
@@ -156,7 +158,7 @@ set-resources:
     mem_mb: 1024
   samtools_alignment_qc:
     runtime: 240
-    mem_mb: 2048
+    mem_mb: 8192
   caller_tiers:
     runtime: 60
     mem_mb: 2048

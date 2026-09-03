@@ -138,6 +138,7 @@ rule split_wgs_intervals:
         scatter_count=len(SCATTER_IDS),
         output_container=container_path(tmp_path("analysis", "mutect2_shards"))
     threads: 1
+    resources: mem_mb=8192
     shell:
         """
         rm -rf {output.shards}
@@ -740,7 +741,7 @@ rule mutect2_orientation_model:
         inputs=lambda wildcards: " ".join(f"-I /data/{tmp_path(f'{wildcards.tumour}.{chrom}.mutect2.f1r2.tar.gz')}" for chrom in SCATTER_IDS),
         temporary=tmp_path("{tumour}.mutect2.orientation-model.tar.gz")
     threads: 1
-    resources: mem_mb=4096, runtime=120, disk_mb=4096
+    resources: mem_mb=8192, runtime=120, disk_mb=4096
     shell:
         """
         set -euo pipefail
@@ -769,6 +770,7 @@ rule contamination_sites:
         territory_container=lambda wildcards: container_path(analysis_territory()),
         tmp_vcf=tmp_path("analysis", "contamination.sites.publish.vcf.gz")
     threads: 1
+    resources: mem_mb=8192
     shell:
         """
         {params.gatk_cmd} \

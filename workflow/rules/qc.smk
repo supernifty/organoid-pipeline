@@ -13,7 +13,7 @@ rule samtools_alignment_qc:
         flagstat=tmp_path("qc", "{sample}.flagstat.txt"),
         stats=tmp_path("qc", "{sample}.stats.txt")
     threads: 4
-    resources: mem_mb=2048, runtime=240, disk_mb=1024
+    resources: mem_mb=8192, runtime=240, disk_mb=1024
     shell:
         """
         set -euo pipefail

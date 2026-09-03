@@ -310,6 +310,39 @@ def test_slurm_walltimes_are_placeable_for_low_depth_wgs():
     )
 
 
+def test_memory_headroom_for_jvm_and_observed_samtools_workloads():
+    profile = yaml.safe_load((ROOT / "config/slurm/config.yaml").read_text())["set-resources"]
+    expected = {
+        "fastqc": 4096,
+        "samtools_alignment_qc": 8192,
+        "split_wgs_intervals": 8192,
+        "contamination_sites": 8192,
+        "mutect2_orientation_model": 8192,
+    }
+    for rule, mem_mb in expected.items():
+        assert profile[rule]["mem_mb"] == mem_mb
+
+    rule_sources = {
+        "fastqc": ROOT / "workflow/rules/fastqc.smk",
+        "samtools_alignment_qc": ROOT / "workflow/rules/qc.smk",
+        "split_wgs_intervals": ROOT / "workflow/rules/variant_calling.smk",
+        "contamination_sites": ROOT / "workflow/rules/variant_calling.smk",
+        "mutect2_orientation_model": ROOT / "workflow/rules/variant_calling.smk",
+    }
+    for rule, path in rule_sources.items():
+        body = path.read_text().split(f"rule {rule}:", 1)[1].split("\nrule ", 1)[0]
+        assert f"mem_mb={expected[rule]}" in body
+
+    # FastQC uses 512 MB per requested thread; the three GATK rules use -Xmx4g.
+    fastqc_body = rule_sources["fastqc"].read_text().split("rule fastqc:", 1)[1]
+    assert "threads: 4" in fastqc_body
+    assert profile["fastqc"]["mem_mb"] >= 4 * 512 + 2048
+    for rule in ("split_wgs_intervals", "contamination_sites", "mutect2_orientation_model"):
+        body = rule_sources[rule].read_text().split(f"rule {rule}:", 1)[1].split("\nrule ", 1)[0]
+        assert 'gatk_java_options("4g")' in body
+        assert profile[rule]["mem_mb"] >= 4096 + 4096
+
+
 def test_alignment_inputs_are_ignored_by_git():
     ignore = (ROOT / ".gitignore").read_text().splitlines()
     assert "/data/" in ignore

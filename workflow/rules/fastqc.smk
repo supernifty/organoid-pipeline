@@ -7,6 +7,7 @@ rule fastqc:
     params:
         outdir="results/qc/fastqc/{sample}"
     threads: 4
+    resources: mem_mb=4096
     shell:
         """
         mkdir -p {params.outdir}
