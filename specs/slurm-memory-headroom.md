@@ -23,6 +23,14 @@ catalog filtering, and SBS96 steps also retain whole candidate collections or
 captured subprocess output, so their previous 2–4 GiB requests are unsafe for
 the same real WGS candidate volume.
 
+The completed paired-FASTQ run subsequently measured successful peak RSS of
+2,555.61 MB for `caller_tiers`, 2,994.10 MB for `cohort_allele_recount`, and
+123.6 MB for `filter_organoid_catalog`. The production run is expected to have
+20 samples. Cohort allele recount therefore retains its conservative 65,536 MB
+allocation because both the candidate union and per-sample pileup work scale
+with cohort size. Caller tiers is per tumour, while catalog filtering retains
+enough headroom for the expected cohort after scaling the observed workload.
+
 ## Goals
 
 - Give `samtools_alignment_qc` enough conservative headroom to resume and
@@ -49,16 +57,15 @@ Other rules outside the candidate-processing chain are unchanged in this pass.
 Heavy native tools already have larger allocations, and other fixed-heap GATK
 rules have scheduler headroom. Defaults for lightweight rules remain 4,096 MB.
 
-For the active candidate-processing chain, increase `caller_tiers` and
-`cohort_candidate_union` to 32,768 MB. Increase `cohort_allele_recount` and
-`filter_organoid_catalog` to 65,536 MB because the former captures complete
-`samtools mpileup` output and builds result rows in memory, while the latter
-holds cohort VCF dictionaries, all recount rows, annotations, and several
-output classifications concurrently. Increase `sbs96_catalogs` to 32,768 MB
-because it retains keys from four catalogs, unique keys, fetched contexts, and
-counts. These are conservative operational allocations, not estimates of
-eventual peak RSS; benchmark evidence from a successful run should be used to
-right-size them or motivate streaming implementations later.
+For the active candidate-processing chain, set `caller_tiers` to 16,384 MB and
+retain `cohort_candidate_union` at 32,768 MB. Retain
+`cohort_allele_recount` at 65,536 MB because it captures complete
+`samtools mpileup` output and builds result rows in memory across the expected
+20-sample cohort. Set `filter_organoid_catalog` to 8,192 MB; this remains more than 60
+times the one-pair observed peak and leaves headroom for its cohort VCF
+dictionaries, recount rows, annotations, and output classifications. Retain
+`sbs96_catalogs` at 32,768 MB pending benchmark evidence from the corrected
+run.
 
 ## Acceptance criteria
 
@@ -69,10 +76,14 @@ right-size them or motivate streaming implementations later.
 - `split_wgs_intervals`, `contamination_sites`, and
   `mutect2_orientation_model` request 8,192 MB in both their rule declarations
   and the SLURM profile.
-- `caller_tiers`, `cohort_candidate_union`, and `sbs96_catalogs` request
-  32,768 MB in both their rule declarations and the SLURM profile.
-- `cohort_allele_recount` and `filter_organoid_catalog` request 65,536 MB in
-  both their rule declarations and the SLURM profile.
+- `caller_tiers` requests 16,384 MB in both its rule declaration and the SLURM
+  profile.
+- `cohort_candidate_union` and `sbs96_catalogs` continue to request 32,768 MB
+  in both their rule declarations and the SLURM profile.
+- `cohort_allele_recount` continues to request 65,536 MB in both its rule
+  declaration and the SLURM profile for the expected 20-sample cohort.
+- `filter_organoid_catalog` requests 8,192 MB in both its rule declaration and
+  the SLURM profile.
 - Tests assert these production memory requests and the intended minimum
   scheduler-to-heap headroom.
 - Existing outputs remain reusable when an inactive failed batch is explicitly

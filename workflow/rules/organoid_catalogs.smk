@@ -61,7 +61,7 @@ rule caller_tiers:
         prefix=tmp_path("caller_tiers", "{tumour}"),
         script=os.path.join(PIPELINE_DIR, "workflow/scripts/caller_tiers.py")
     threads: 1
-    resources: mem_mb=32768, runtime=60, disk_mb=4096
+    resources: mem_mb=16384, runtime=60, disk_mb=4096
     shell:
         r"""
         set -euo pipefail
@@ -156,7 +156,7 @@ rule filter_organoid_catalog:
         min_alt=config["filtering"]["min_later_alt_reads"], min_vaf=config["filtering"]["later_vaf_threshold"],
         min_base_dp=config["filtering"]["minimum_baseline_depth"], max_base_alt=config["filtering"]["maximum_baseline_alt_reads"]
     threads: 1
-    resources: mem_mb=65536, runtime=240, disk_mb=4096
+    resources: mem_mb=8192, runtime=240, disk_mb=4096
     shell:
         r"""
         set -euo pipefail

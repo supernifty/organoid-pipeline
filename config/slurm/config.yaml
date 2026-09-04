@@ -161,7 +161,7 @@ set-resources:
     mem_mb: 8192
   caller_tiers:
     runtime: 60
-    mem_mb: 32768
+    mem_mb: 16384
   cohort_candidate_union:
     runtime: 60
     mem_mb: 32768
@@ -170,7 +170,7 @@ set-resources:
     mem_mb: 65536
   filter_organoid_catalog:
     runtime: 240
-    mem_mb: 65536
+    mem_mb: 8192
   sbs96_catalogs:
     runtime: 120
     mem_mb: 32768

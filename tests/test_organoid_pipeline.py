@@ -318,10 +318,10 @@ def test_memory_headroom_for_jvm_and_observed_samtools_workloads():
         "split_wgs_intervals": 8192,
         "contamination_sites": 8192,
         "mutect2_orientation_model": 8192,
-        "caller_tiers": 32768,
+        "caller_tiers": 16384,
         "cohort_candidate_union": 32768,
         "cohort_allele_recount": 65536,
-        "filter_organoid_catalog": 65536,
+        "filter_organoid_catalog": 8192,
         "sbs96_catalogs": 32768,
     }
     for rule, mem_mb in expected.items():
