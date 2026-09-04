@@ -61,7 +61,7 @@ rule caller_tiers:
         prefix=tmp_path("caller_tiers", "{tumour}"),
         script=os.path.join(PIPELINE_DIR, "workflow/scripts/caller_tiers.py")
     threads: 1
-    resources: mem_mb=2048, runtime=60, disk_mb=4096
+    resources: mem_mb=32768, runtime=60, disk_mb=4096
     shell:
         r"""
         set -euo pipefail
@@ -96,7 +96,7 @@ rule cohort_candidate_union:
         inputs=lambda wildcards: " ".join(f"--input {sample}=results/callers/{sample}.union.vcf.gz" for sample in tumour_samples()),
         temporary=tmp_path("cohort.candidates.union.vcf")
     threads: 1
-    resources: mem_mb=2048, runtime=60, disk_mb=4096
+    resources: mem_mb=32768, runtime=60, disk_mb=4096
     shell:
         """
         set -euo pipefail
@@ -119,7 +119,7 @@ rule cohort_allele_recount:
     benchmark: "results/benchmarks/cohort_allele_recount.tsv"
     params: sample_args=cohort_alignment_args, temporary=tmp_path("cohort.allele_counts.tsv")
     threads: 1
-    resources: mem_mb=4096, runtime=1440, disk_mb=4096
+    resources: mem_mb=65536, runtime=1440, disk_mb=4096
     shell:
         """
         set -euo pipefail
@@ -156,7 +156,7 @@ rule filter_organoid_catalog:
         min_alt=config["filtering"]["min_later_alt_reads"], min_vaf=config["filtering"]["later_vaf_threshold"],
         min_base_dp=config["filtering"]["minimum_baseline_depth"], max_base_alt=config["filtering"]["maximum_baseline_alt_reads"]
     threads: 1
-    resources: mem_mb=4096, runtime=240, disk_mb=4096
+    resources: mem_mb=65536, runtime=240, disk_mb=4096
     shell:
         r"""
         set -euo pipefail
@@ -194,7 +194,7 @@ rule sbs96_catalogs:
     benchmark: "results/benchmarks/signatures/{tumour}.sbs96.tsv"
     params: temporary=tmp_path("signatures", "{tumour}.sbs96.tsv")
     threads: 1
-    resources: mem_mb=2048, runtime=120, disk_mb=1024
+    resources: mem_mb=32768, runtime=120, disk_mb=1024
     shell:
         """
         set -euo pipefail

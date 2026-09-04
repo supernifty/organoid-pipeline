@@ -318,6 +318,11 @@ def test_memory_headroom_for_jvm_and_observed_samtools_workloads():
         "split_wgs_intervals": 8192,
         "contamination_sites": 8192,
         "mutect2_orientation_model": 8192,
+        "caller_tiers": 32768,
+        "cohort_candidate_union": 32768,
+        "cohort_allele_recount": 65536,
+        "filter_organoid_catalog": 65536,
+        "sbs96_catalogs": 32768,
     }
     for rule, mem_mb in expected.items():
         assert profile[rule]["mem_mb"] == mem_mb
@@ -328,6 +333,11 @@ def test_memory_headroom_for_jvm_and_observed_samtools_workloads():
         "split_wgs_intervals": ROOT / "workflow/rules/variant_calling.smk",
         "contamination_sites": ROOT / "workflow/rules/variant_calling.smk",
         "mutect2_orientation_model": ROOT / "workflow/rules/variant_calling.smk",
+        "caller_tiers": ROOT / "workflow/rules/organoid_catalogs.smk",
+        "cohort_candidate_union": ROOT / "workflow/rules/organoid_catalogs.smk",
+        "cohort_allele_recount": ROOT / "workflow/rules/organoid_catalogs.smk",
+        "filter_organoid_catalog": ROOT / "workflow/rules/organoid_catalogs.smk",
+        "sbs96_catalogs": ROOT / "workflow/rules/organoid_catalogs.smk",
     }
     for rule, path in rule_sources.items():
         body = path.read_text().split(f"rule {rule}:", 1)[1].split("\nrule ", 1)[0]

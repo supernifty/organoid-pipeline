@@ -161,19 +161,19 @@ set-resources:
     mem_mb: 8192
   caller_tiers:
     runtime: 60
-    mem_mb: 2048
+    mem_mb: 32768
   cohort_candidate_union:
     runtime: 60
-    mem_mb: 2048
+    mem_mb: 32768
   cohort_allele_recount:
     runtime: 1440
-    mem_mb: 4096
+    mem_mb: 65536
   filter_organoid_catalog:
     runtime: 240
-    mem_mb: 4096
+    mem_mb: 65536
   sbs96_catalogs:
     runtime: 120
-    mem_mb: 2048
+    mem_mb: 32768
 
 # Job settings
 jobs: 256
