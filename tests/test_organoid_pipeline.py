@@ -288,8 +288,9 @@ def test_slurm_walltimes_are_placeable_for_low_depth_wgs():
         "mutect2_chromosome",
     ):
         assert profile[rule]["runtime"] == 720
-    for rule in ("bwa_mem", "bwa_mem_paired", "strelka_somatic", "germline_haplotypecaller_shard"):
+    for rule in ("bwa_mem", "strelka_somatic", "germline_haplotypecaller_shard"):
         assert profile[rule]["runtime"] == 1440
+    assert profile["bwa_mem_paired"]["runtime"] == 360
 
     variant_rules = (ROOT / "workflow/rules/variant_calling.smk").read_text()
     for rule in (
@@ -302,7 +303,7 @@ def test_slurm_walltimes_are_placeable_for_low_depth_wgs():
     strelka = variant_rules.split("rule strelka_somatic:", 1)[1].split("\nrule ", 1)[0]
     assert 'runtime=1440 if ANALYSIS_TYPE == "wgs" else 360' in strelka
     alignment = (ROOT / "workflow/rules/alignment.smk").read_text()
-    assert "runtime=1440" in alignment.split("rule bwa_mem_paired:", 1)[1].split("\nrule ", 1)[0]
+    assert "runtime=360" in alignment.split("rule bwa_mem_paired:", 1)[1].split("\nrule ", 1)[0]
     germline = (ROOT / "workflow/rules/germline.smk").read_text()
     assert (
         "runtime=1440"

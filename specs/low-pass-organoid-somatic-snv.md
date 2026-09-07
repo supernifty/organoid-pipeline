@@ -284,17 +284,20 @@ unlock failure, provenance, and refusal while the controller lock is held.
 
 The site-neutral SLURM defaults must request walltimes that schedulers can place
 for low-depth WGS rather than multi-day conservative maxima. Mutect2 calling
-and PoN shards default to 720 minutes, while whole-genome Strelka, paired FASTQ
-alignment, and optional HaplotypeCaller shards default to at most 1,440
-minutes. The rule declarations and native SLURM profile must agree so direct and
-profile execution do not diverge. Lower existing limits remain unchanged, and
-operators may override a specific rule with Snakemake `--set-resources` when
-measured site/sample performance justifies it. Tests must assert the capped
-defaults for the named rules. Applying changed walltimes to a failed batch must
-not delete completed outputs: after all old controller and child jobs are
-confirmed stopped, pull the new revision, run guarded recovery only if the
-batch is still stale-active, then explicitly resume so newly submitted jobs use
-the current resource declarations.
+and PoN shards default to 720 minutes, while whole-genome Strelka and optional
+HaplotypeCaller shards default to at most 1,440 minutes. Successful paired
+FASTQ BWA/sort benchmarks at 6x completed in 33–37 minutes, so
+`bwa_mem_paired` defaults to 360 minutes. This retains almost tenfold measured
+headroom while making the job easier for a scheduler to place through
+backfill. The rule declarations and native SLURM profile must agree so direct
+and profile execution do not diverge. Lower existing limits remain unchanged,
+and operators may override a specific rule with Snakemake `--set-resources`
+when measured site/sample performance justifies it. Tests must assert the
+capped defaults for the named rules. Applying changed walltimes to a failed
+batch must not delete completed outputs: after all old controller and child
+jobs are confirmed stopped, pull the new revision, run guarded recovery only
+if the batch is still stale-active, then explicitly resume so newly submitted
+jobs use the current resource declarations.
 
 Acceptance requires the public README and tracked examples to remain site-neutral, ignored private deployment files to be excluded by `git status`, shell syntax checks for changed scripts, the Python test suite, and a complete synthetic DAG dry run. The user executes remote commands interactively; authentication, allocation, data, or reference gaps must be reported rather than guessed.
 

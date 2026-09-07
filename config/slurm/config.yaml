@@ -20,7 +20,7 @@ set-resources:
     runtime: 1440
     mem_mb: 16384
   bwa_mem_paired:
-    runtime: 1440
+    runtime: 360
     mem_mb: 49152
   mark_duplicates:
     runtime: 480
